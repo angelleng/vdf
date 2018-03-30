@@ -7,8 +7,7 @@ import (
 	"fmt"
 	"math/big"
 	"math/rand"
-
-	"github.com/kavehmz/prime"
+	"prime"
 )
 
 const t = 10000  // 1000000
