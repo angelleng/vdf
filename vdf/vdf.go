@@ -1,4 +1,4 @@
-package main
+package vdf
 
 import (
 	cryptorand "crypto/rand"
@@ -66,7 +66,7 @@ func isStrongPrime(prime *big.Int) bool {
 }
 
 // interface
-func setup() (*EvalKey, *VerifyKey) {
+func Setup() (*EvalKey, *VerifyKey) {
 	fmt.Println("setup")
 	fmt.Printf("parameters: t: %v, B: %v\n", t, B)
 
@@ -130,7 +130,7 @@ func setup() (*EvalKey, *VerifyKey) {
 	return &evaluateKey, &verifyKey
 }
 
-func evaluate(evaluateKey *EvalKey, x int) (y *big.Int) {
+func Evaluate(evaluateKey *EvalKey, x int) (y *big.Int) {
 	N := evaluateKey.G
 	gs := evaluateKey.gs
 	L := computeL(t)
@@ -181,7 +181,7 @@ func shortcut(x int) (y *big.Int) {
 	return
 }
 
-func verify(verifyKey *VerifyKey, y *big.Int, x int) bool {
+func Verify(verifyKey *VerifyKey, y *big.Int, x int) bool {
 	hashfunc := verifyKey.H
 	hs := computehs(hashfunc, B)
 	L := computeL(t)
@@ -220,10 +220,11 @@ func verify(verifyKey *VerifyKey, y *big.Int, x int) bool {
 	return h_x.Sign() == 0
 }
 
-func main() {
-	evaluateKey, verifyKey := setup()
-	solution := evaluate(evaluateKey, 1)
-	success := verify(verifyKey, solution, 1)
-	fmt.Println("result: ", success)
-	fmt.Println("finish")
-}
+//example usage
+//func main() {
+//	evaluateKey, verifyKey := setup()
+//	solution := evaluate(evaluateKey, 1)
+//	success := verify(verifyKey, solution, 1)
+//	fmt.Println("result: ", success)
+//	fmt.Println("finish")
+//}
