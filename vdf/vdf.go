@@ -1,12 +1,13 @@
 package vdf
 
 import (
+	"bytes"
 	cryptorand "crypto/rand"
 	"crypto/rsa"
 	"crypto/sha256"
+	"encoding/gob"
 	"fmt"
 	"math/big"
-	"math/rand"
 	"prime"
 )
 
@@ -65,6 +66,36 @@ func isStrongPrime(prime *big.Int) bool {
 	return small.ProbablyPrime(60)
 }
 
+func generateChallenge(X interface{}) (Ind_L, Ind_S []int) {
+	// first turn X into bytes
+	w := new(bytes.Buffer)
+	e := gob.NewEncoder(w)
+	e.Encode(X)
+	data := w.Bytes()
+
+	h := sha256.New()
+	Ind_L = make([]int, lambda)
+	for i := 0; i < lambda; i++ {
+		h.Write(data)
+		shasum := h.Sum(nil)
+		ind := big.NewInt(0)
+		ind.SetBytes(shasum)
+		ind.Mod(ind, big.NewInt(t))
+		Ind_L[i] = int(ind.Int64())
+	}
+
+	Ind_S = make([]int, lambda)
+	for i := 0; i < lambda; i++ {
+		h.Write(data)
+		shasum := h.Sum(nil)
+		ind := big.NewInt(0)
+		ind.SetBytes(shasum)
+		ind.Mod(ind, big.NewInt(B))
+		Ind_S[i] = int(ind.Int64())
+	}
+	return
+}
+
 // interface
 func Setup() (*EvalKey, *VerifyKey) {
 	fmt.Println("setup")
@@ -102,7 +133,7 @@ func Setup() (*EvalKey, *VerifyKey) {
 
 	hashfunc := func(input *big.Int) (hashval *big.Int) {
 		h := sha256.New()
-		h.Write([]byte(input.Bytes()))
+		h.Write(input.Bytes())
 		shasum := h.Sum(nil)
 		hashval = big.NewInt(0)
 		hashval.SetBytes(shasum)
@@ -124,9 +155,9 @@ func Evaluate(evaluateKey *EvalKey, x int) (y *big.Int) {
 	N := evaluateKey.G
 	gs := evaluateKey.Gs
 	L := computeL(t)
-	rand.Seed(int64(x))
 	fmt.Println("evaluate")
-	L_ind := rand.Perm(t)[:lambda]
+
+	L_ind, S_x := generateChallenge(x)
 	L_x := make([]*big.Int, lambda)
 	for i, v := range L_ind {
 		L_x[i] = L[v]
@@ -137,7 +168,6 @@ func Evaluate(evaluateKey *EvalKey, x int) (y *big.Int) {
 		P_x.Mul(P_x, v)
 	}
 
-	S_x := rand.Perm(B)[:lambda]
 	g_x := big.NewInt(1)
 	for _, v := range S_x {
 		g_x.Mul(g_x, gs[v])
@@ -162,14 +192,13 @@ func Evaluate(evaluateKey *EvalKey, x int) (y *big.Int) {
 }
 
 func Verify(verifyKey *VerifyKey, y *big.Int, x int) bool {
+	fmt.Println("verify")
 	hashfunc := verifyKey.H
 	hs := computehs(hashfunc, B)
 	L := computeL(t)
 
-	rand.Seed(int64(x))
-	fmt.Println("verify")
 	N := verifyKey.G
-	L_ind := rand.Perm(t)[:lambda]
+	L_ind, S_x := generateChallenge(x)
 	L_x := make([]*big.Int, lambda)
 	for i, v := range L_ind {
 		L_x[i] = L[v]
@@ -180,7 +209,6 @@ func Verify(verifyKey *VerifyKey, y *big.Int, x int) bool {
 		P_x.Mul(P_x, v)
 	}
 
-	S_x := rand.Perm(B)[:lambda]
 	h_x := big.NewInt(1)
 	for _, v := range S_x {
 		h_x.Mul(h_x, hs[v])
