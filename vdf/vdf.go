@@ -3,7 +3,6 @@ package vdf
 import (
 	"bytes"
 	cryptorand "crypto/rand"
-	"crypto/rsa"
 	"crypto/sha256"
 	"encoding/gob"
 	"fmt"
@@ -13,7 +12,7 @@ import (
 
 const t = 10000  // 1000000
 const B = 100000 // 1 << 10
-const lambda = 10
+const lambda = 64
 
 type EvalKey struct {
 	G  *big.Int
@@ -63,7 +62,7 @@ func isStrongPrime(prime *big.Int) bool {
 	small := big.NewInt(0)
 	small.Add(prime, big.NewInt(-1))
 	small.Div(small, big.NewInt(2))
-	return small.ProbablyPrime(60)
+	return small.ProbablyPrime(10)
 }
 
 func generateChallenge(X interface{}) (Ind_L, Ind_S []int) {
@@ -74,31 +73,54 @@ func generateChallenge(X interface{}) (Ind_L, Ind_S []int) {
 	data := w.Bytes()
 
 	h := sha256.New()
-	Ind_L = make([]int, lambda)
-	for i := 0; i < lambda; i++ {
+	Ind_L = make([]int, 0, lambda)
+
+	for i := 0; i < lambda; {
+		dupe := false
 		h.Write(data)
 		shasum := h.Sum(nil)
 		ind := big.NewInt(0)
 		ind.SetBytes(shasum)
 		ind.Mod(ind, big.NewInt(t))
-		Ind_L[i] = int(ind.Int64())
+		index := int(ind.Int64())
+		for _, v := range Ind_L {
+			if v == index {
+				dupe = true
+				break
+			}
+		}
+		if !dupe {
+			Ind_L = append(Ind_L, index)
+			i++
+		}
 	}
 
 	Ind_S = make([]int, lambda)
-	for i := 0; i < lambda; i++ {
+	for i := 0; i < lambda; {
+		dupe := false
 		h.Write(data)
 		shasum := h.Sum(nil)
 		ind := big.NewInt(0)
 		ind.SetBytes(shasum)
 		ind.Mod(ind, big.NewInt(B))
-		Ind_S[i] = int(ind.Int64())
+		index := int(ind.Int64())
+		for _, v := range Ind_S {
+			if v == index {
+				dupe = true
+				break
+			}
+		}
+		if !dupe {
+			Ind_S = append(Ind_S, index)
+			i++
+		}
 	}
 	return
 }
 
 // interface
 func Setup() (*EvalKey, *VerifyKey) {
-	fmt.Println("setup")
+	fmt.Println("\nSETUP")
 	fmt.Printf("parameters: t: %v, B: %v, lambda: %v \n", t, B, lambda)
 
 	L := computeL(t)
@@ -110,24 +132,32 @@ func Setup() (*EvalKey, *VerifyKey) {
 
 	p := big.NewInt(1)
 	q := big.NewInt(1)
-	var rsaKey *rsa.PrivateKey
-	var N *big.Int
 
-	for !isStrongPrime(p) || !isStrongPrime(q) {
-		rsaKey, _ = rsa.GenerateKey(cryptorand.Reader, 59)
-		N = rsaKey.PublicKey.N
-		p = rsaKey.Primes[0]
-		q = rsaKey.Primes[1]
+	N := new(big.Int)
+
+	for !isStrongPrime(p) {
+		fmt.Println("trying")
+		p, _ = cryptorand.Prime(cryptorand.Reader, 48)
 	}
+	for !isStrongPrime(q) {
+		q, _ = cryptorand.Prime(cryptorand.Reader, 48)
+	}
+	N.Mul(p, q)
 
-	fmt.Println("p and q", rsaKey.Primes)
-	fmt.Println("N and e", rsaKey.PublicKey)
-	fmt.Println("D", rsaKey.D)
-	fmt.Println("precomputed", rsaKey.Precomputed)
+	// for !isStrongPrime(p) || !isStrongPrime(q) {
+	// 	rsaKey, _ = rsa.GenerateKey(cryptorand.Reader, 2048)
+	// 	N = rsaKey.PublicKey.N
+	// 	p = rsaKey.Primes[0]
+	// 	q = rsaKey.Primes[1]
+	// }
+
+	fmt.Println("p and q", p, q)
+	fmt.Println("N ", N)
+	// fmt.Println("precomputed", rsaKey.Precomputed)
 	tmp := big.NewInt(0)
-	tmp.Add(rsaKey.Primes[0], big.NewInt(-1))
+	tmp.Add(p, big.NewInt(-1))
 	phi := big.NewInt(0)
-	phi.Add(rsaKey.Primes[1], big.NewInt(-1))
+	phi.Add(q, big.NewInt(-1))
 	phi.Mul(phi, tmp)
 	fmt.Println("phi", phi)
 
@@ -155,7 +185,7 @@ func Evaluate(evaluateKey *EvalKey, x int) (y *big.Int) {
 	N := evaluateKey.G
 	gs := evaluateKey.Gs
 	L := computeL(t)
-	fmt.Println("evaluate")
+	fmt.Println("\nEVALUATE")
 
 	L_ind, S_x := generateChallenge(x)
 	L_x := make([]*big.Int, lambda)
@@ -192,7 +222,7 @@ func Evaluate(evaluateKey *EvalKey, x int) (y *big.Int) {
 }
 
 func Verify(verifyKey *VerifyKey, y *big.Int, x int) bool {
-	fmt.Println("verify")
+	fmt.Println("\nVERIFY")
 	hashfunc := verifyKey.H
 	hs := computehs(hashfunc, B)
 	L := computeL(t)
