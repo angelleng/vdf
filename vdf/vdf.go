@@ -12,7 +12,7 @@ import (
 
 const t = 10000  // 1000000
 const B = 100000 // 1 << 10
-const lambda = 64
+const lambda = 10
 
 type EvalKey struct {
 	G  *big.Int
@@ -95,7 +95,7 @@ func generateChallenge(X interface{}) (Ind_L, Ind_S []int) {
 		}
 	}
 
-	Ind_S = make([]int, lambda)
+	Ind_S = make([]int, 0, lambda)
 	for i := 0; i < lambda; {
 		dupe := false
 		h.Write(data)
@@ -142,14 +142,12 @@ func Setup() (*EvalKey, *VerifyKey) {
 	for !isStrongPrime(q) {
 		q, _ = cryptorand.Prime(cryptorand.Reader, 48)
 	}
-	N.Mul(p, q)
 
-	// for !isStrongPrime(p) || !isStrongPrime(q) {
-	// 	rsaKey, _ = rsa.GenerateKey(cryptorand.Reader, 2048)
-	// 	N = rsaKey.PublicKey.N
-	// 	p = rsaKey.Primes[0]
-	// 	q = rsaKey.Primes[1]
-	// }
+	// p := StrongPrime(208)
+	// q := StrongPrime(208)
+	// N := new(big.Int)
+
+	N.Mul(p, q)
 
 	fmt.Println("p and q", p, q)
 	fmt.Println("N ", N)
