@@ -58,11 +58,20 @@ func computegs(hs []*big.Int, P_inv *big.Int, N *big.Int) (gs []*big.Int) {
 	return
 }
 
-func isStrongPrime(prime *big.Int) bool {
-	small := big.NewInt(0)
-	small.Add(prime, big.NewInt(-1))
-	small.Div(small, big.NewInt(2))
-	return small.ProbablyPrime(10)
+func isStrongPrime(prime *big.Int, L []*big.Int, P *big.Int) bool {
+	resP := new(big.Int)
+	resP.Sub(prime, big.NewInt(1))
+	resP.Div(resP, big.NewInt(2))
+	resP.Mod(resP, P)
+
+	for _, v := range L {
+		resv := new(big.Int)
+		resv.Mod(resP, v)
+		if resv.Sign() == 0 {
+			return false
+		}
+	}
+	return true
 }
 
 func generateChallenge(X interface{}) (Ind_L, Ind_S []int) {
@@ -132,20 +141,33 @@ func Setup() (*EvalKey, *VerifyKey) {
 
 	p := big.NewInt(1)
 	q := big.NewInt(1)
-
 	N := new(big.Int)
 
-	for !isStrongPrime(p) {
-		fmt.Println("trying")
-		p, _ = cryptorand.Prime(cryptorand.Reader, 48)
+	for !isStrongPrime(p, L, P) {
+		fmt.Println("trying1")
+		p, _ = cryptorand.Prime(cryptorand.Reader, 2048)
 	}
-	for !isStrongPrime(q) {
-		q, _ = cryptorand.Prime(cryptorand.Reader, 48)
+	for !isStrongPrime(q, L, P) {
+		fmt.Println("trying2")
+		q, _ = cryptorand.Prime(cryptorand.Reader, 2048)
 	}
 
 	// p := StrongPrime(208)
 	// q := StrongPrime(208)
 	// N := new(big.Int)
+
+	// for !p.ProbablyPrime(20) {
+	// 	fmt.Println("trying1")
+	// 	p, _ = cryptorand.Prime(cryptorand.Reader, 2048)
+	// 	p.Mul(p, big.NewInt(2))
+	// 	p.Add(p, big.NewInt(1))
+	// }
+	// for !q.ProbablyPrime(20) {
+	// 	fmt.Println("trying2")
+	// 	q, _ = cryptorand.Prime(cryptorand.Reader, 2048)
+	// 	q.Mul(q, big.NewInt(2))
+	// 	q.Add(q, big.NewInt(1))
+	// }
 
 	N.Mul(p, q)
 
