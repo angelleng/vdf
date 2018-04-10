@@ -270,10 +270,8 @@ func Verify(verifyKey *VerifyKey, y *big.Int, x int) bool {
 
 	fmt.Println("h", h_x)
 	fmt.Println("h2", h2)
-
-	h_x.Add(h_x, h2.Neg(h2))
-
-	return h_x.Sign() == 0
+	compare := h_x.Cmp(h2)
+	return compare == 0
 }
 
 //example usage
