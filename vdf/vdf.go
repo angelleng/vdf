@@ -144,6 +144,28 @@ func generateChallenge(t, B, lambda int, X interface{}) (Ind_L, Ind_S []int) {
 	return
 }
 
+func generateTwoGoodPrimes(keysize int, L []*big.Int, P *big.Int) (p, q *big.Int) {
+	primechan := make(chan *big.Int)
+	found := false
+	for i := 0; i < 4; i++ {
+		go func() {
+			for !found {
+				fmt.Println("trying1")
+				candidate, _ := cryptorand.Prime(cryptorand.Reader, keysize)
+				if isStrongPrime(candidate, L, P) {
+					primechan <- candidate
+				}
+			}
+		}()
+	}
+	p = <-primechan
+	fmt.Println("have one prime")
+	q = <-primechan
+	found = true
+	fmt.Println("have second prime")
+	return
+}
+
 // interface
 func Setup(t, B, lambda, keysize int) (*EvalKey, *VerifyKey) {
 	fmt.Println("\nSETUP")
@@ -159,38 +181,21 @@ func Setup(t, B, lambda, keysize int) (*EvalKey, *VerifyKey) {
 	p := big.NewInt(1)
 	q := big.NewInt(1)
 	N := new(big.Int)
+	p, q = generateTwoGoodPrimes(keysize, L, P)
 
-	for !isStrongPrime(p, L, P) {
-		fmt.Println("trying1")
-		p, _ = cryptorand.Prime(cryptorand.Reader, keysize)
-	}
-	for !isStrongPrime(q, L, P) {
-		fmt.Println("trying2")
-		q, _ = cryptorand.Prime(cryptorand.Reader, keysize)
-	}
-
-	// p := StrongPrime(208)
-	// q := StrongPrime(208)
-	// N := new(big.Int)
-
-	// for !p.ProbablyPrime(20) {
+	// for !isStrongPrime(p, L, P) {
 	// 	fmt.Println("trying1")
-	// 	p, _ = cryptorand.Prime(cryptorand.Reader, 2048)
-	// 	p.Mul(p, big.NewInt(2))
-	// 	p.Add(p, big.NewInt(1))
+	// 	p, _ = cryptorand.Prime(cryptorand.Reader, keysize)
 	// }
-	// for !q.ProbablyPrime(20) {
+	// for !isStrongPrime(q, L, P) {
 	// 	fmt.Println("trying2")
-	// 	q, _ = cryptorand.Prime(cryptorand.Reader, 2048)
-	// 	q.Mul(q, big.NewInt(2))
-	// 	q.Add(q, big.NewInt(1))
+	// 	q, _ = cryptorand.Prime(cryptorand.Reader, keysize)
 	// }
 
 	N.Mul(p, q)
 
 	fmt.Println("p and q", p, q)
 	fmt.Println("N ", N)
-	// fmt.Println("precomputed", rsaKey.Precomputed)
 	tmp := big.NewInt(0)
 	tmp.Add(p, big.NewInt(-1))
 	phi := big.NewInt(0)
