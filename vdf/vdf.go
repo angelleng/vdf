@@ -8,11 +8,8 @@ import (
 	"fmt"
 	"math/big"
 	"prime"
+	"sync"
 )
-
-const t = 10000  // 1000000
-const B = 100000 // 1 << 10
-const lambda = 10
 
 type EvalKey struct {
 	G  *big.Int
@@ -51,10 +48,20 @@ func computehs(hashfunc func(*big.Int) *big.Int, B int) (hs []*big.Int) {
 
 func computegs(hs []*big.Int, P_inv *big.Int, N *big.Int) (gs []*big.Int) {
 	gs = make([]*big.Int, len(hs))
+	// for i, v := range hs {
+	// 	gs[i] = big.NewInt(0)
+	// 	gs[i].Exp(v, P_inv, N)
+	// }
+	var wg sync.WaitGroup
+	wg.Add(len(hs))
 	for i, v := range hs {
-		gs[i] = big.NewInt(0)
-		gs[i].Exp(v, P_inv, N)
+		go func(i int, v *big.Int) {
+			defer wg.Done()
+			gs[i] = big.NewInt(0)
+			gs[i].Exp(v, P_inv, N)
+		}(i, v)
 	}
+	wg.Wait()
 	return
 }
 
@@ -74,7 +81,7 @@ func isStrongPrime(prime *big.Int, L []*big.Int, P *big.Int) bool {
 	return true
 }
 
-func generateChallenge(X interface{}) (Ind_L, Ind_S []int) {
+func generateChallenge(t, B, lambda int, X interface{}) (Ind_L, Ind_S []int) {
 	// first turn X into bytes
 	w := new(bytes.Buffer)
 	e := gob.NewEncoder(w)
@@ -84,13 +91,14 @@ func generateChallenge(X interface{}) (Ind_L, Ind_S []int) {
 	h := sha256.New()
 	Ind_L = make([]int, 0, lambda)
 
+	fmt.Println("genChallenge")
 	for i := 0; i < lambda; {
 		dupe := false
 		h.Write(data)
 		shasum := h.Sum(nil)
 		ind := big.NewInt(0)
 		ind.SetBytes(shasum)
-		ind.Mod(ind, big.NewInt(t))
+		ind.Mod(ind, big.NewInt(int64(t)))
 		index := int(ind.Int64())
 		for _, v := range Ind_L {
 			if v == index {
@@ -104,6 +112,7 @@ func generateChallenge(X interface{}) (Ind_L, Ind_S []int) {
 		}
 	}
 
+	fmt.Println("genChallenge")
 	Ind_S = make([]int, 0, lambda)
 	for i := 0; i < lambda; {
 		dupe := false
@@ -111,7 +120,7 @@ func generateChallenge(X interface{}) (Ind_L, Ind_S []int) {
 		shasum := h.Sum(nil)
 		ind := big.NewInt(0)
 		ind.SetBytes(shasum)
-		ind.Mod(ind, big.NewInt(B))
+		ind.Mod(ind, big.NewInt(int64(B)))
 		index := int(ind.Int64())
 		for _, v := range Ind_S {
 			if v == index {
@@ -124,13 +133,14 @@ func generateChallenge(X interface{}) (Ind_L, Ind_S []int) {
 			i++
 		}
 	}
+	fmt.Println("genChallenge")
 	return
 }
 
 // interface
-func Setup() (*EvalKey, *VerifyKey) {
+func Setup(t, B, lambda, keysize int) (*EvalKey, *VerifyKey) {
 	fmt.Println("\nSETUP")
-	fmt.Printf("parameters: t: %v, B: %v, lambda: %v \n", t, B, lambda)
+	fmt.Printf("parameters: t: %v, B: %v, lambda: %v, keysize : %v \n", t, B, lambda, keysize)
 
 	L := computeL(t)
 	fmt.Printf("L [%v %v %v %v ... %v %v %v] \n", L[0], L[1], L[2], L[3], L[len(L)-3], L[len(L)-2], L[len(L)-1])
@@ -145,11 +155,11 @@ func Setup() (*EvalKey, *VerifyKey) {
 
 	for !isStrongPrime(p, L, P) {
 		fmt.Println("trying1")
-		p, _ = cryptorand.Prime(cryptorand.Reader, 2048)
+		p, _ = cryptorand.Prime(cryptorand.Reader, keysize)
 	}
 	for !isStrongPrime(q, L, P) {
 		fmt.Println("trying2")
-		q, _ = cryptorand.Prime(cryptorand.Reader, 2048)
+		q, _ = cryptorand.Prime(cryptorand.Reader, keysize)
 	}
 
 	// p := StrongPrime(208)
@@ -201,13 +211,13 @@ func Setup() (*EvalKey, *VerifyKey) {
 	return &evaluateKey, &verifyKey
 }
 
-func Evaluate(evaluateKey *EvalKey, x int) (y *big.Int) {
+func Evaluate(t, B, lambda int, evaluateKey *EvalKey, x int) (y *big.Int) {
 	N := evaluateKey.G
 	gs := evaluateKey.Gs
 	L := computeL(t)
 	fmt.Println("\nEVALUATE")
 
-	L_ind, S_x := generateChallenge(x)
+	L_ind, S_x := generateChallenge(t, B, lambda, x)
 	L_x := make([]*big.Int, lambda)
 	for i, v := range L_ind {
 		L_x[i] = L[v]
@@ -241,14 +251,14 @@ func Evaluate(evaluateKey *EvalKey, x int) (y *big.Int) {
 	return
 }
 
-func Verify(verifyKey *VerifyKey, y *big.Int, x int) bool {
+func Verify(t, B, lambda int, verifyKey *VerifyKey, y *big.Int, x int) bool {
 	fmt.Println("\nVERIFY")
 	hashfunc := verifyKey.H
 	hs := computehs(hashfunc, B)
 	L := computeL(t)
 
 	N := verifyKey.G
-	L_ind, S_x := generateChallenge(x)
+	L_ind, S_x := generateChallenge(t, B, lambda, x)
 	L_x := make([]*big.Int, lambda)
 	for i, v := range L_ind {
 		L_x[i] = L[v]
