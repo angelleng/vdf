@@ -198,7 +198,7 @@ func generateTwoGoodPrimes(keysize int, L []*big.Int, P *big.Int) (p, q *big.Int
 // interface
 func Setup(t, B, lambda, keysize int) (*EvalKey, *VerifyKey) {
 	fmt.Println("\nSETUP")
-	fmt.Printf("parameters: t: %v, B: %v, lambda: %v, keysize : %v \n", t, B, lambda, keysize)
+	fmt.Printf("parameters: -t=%v -B=%v -lambda=%v -keysize=%v \n", t, B, lambda, keysize)
 
 	L := computeL(t)
 	fmt.Printf("L [%v %v %v %v ... %v %v %v] \n", L[0], L[1], L[2], L[3], L[len(L)-3], L[len(L)-2], L[len(L)-1])
