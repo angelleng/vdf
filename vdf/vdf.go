@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"math/big"
 	"prime"
+	"runtime"
 	"sync"
 	"time"
 )
@@ -55,15 +56,42 @@ func computegs(hs []*big.Int, P_inv *big.Int, N *big.Int) (gs []*big.Int) {
 	// 	gs[i] = big.NewInt(0)
 	// 	gs[i].Exp(v, P_inv, N)
 	// }
+
 	var wg sync.WaitGroup
 	wg.Add(len(hs))
-	for i, v := range hs {
-		go func(i int, v *big.Int) {
-			defer wg.Done()
-			gs[i] = big.NewInt(0)
-			gs[i].Exp(v, P_inv, N)
-		}(i, v)
+	// for i, v := range hs {
+	// 	go func(i int, v *big.Int) {
+	// 		defer wg.Done()
+	// 		gs[i] = big.NewInt(0)
+	// 		gs[i].Exp(v, P_inv, N)
+	// 	}(i, v)
+	// }
+
+	input := make(chan int, 10)
+
+	go func() {
+		for i := 0; i < len(hs); i++ {
+			input <- i
+		}
+		close(input)
+	}()
+
+	for worker := 0; worker < runtime.NumCPU(); worker++ {
+		go func() {
+			for {
+				i, ok := <-input
+				if ok {
+					v := hs[i]
+					gs[i] = big.NewInt(0)
+					gs[i].Exp(v, P_inv, N)
+					wg.Done()
+				} else {
+					return
+				}
+			}
+		}()
 	}
+
 	wg.Wait()
 
 	t := time.Now()
@@ -147,7 +175,8 @@ func generateChallenge(t, B, lambda int, X interface{}) (Ind_L, Ind_S []int) {
 func generateTwoGoodPrimes(keysize int, L []*big.Int, P *big.Int) (p, q *big.Int) {
 	primechan := make(chan *big.Int)
 	found := false
-	for i := 0; i < 4; i++ {
+	fmt.Println("no of cores: ", runtime.NumCPU())
+	for i := 0; i < runtime.NumCPU(); i++ {
 		go func() {
 			for !found {
 				fmt.Println("trying1")
@@ -304,12 +333,3 @@ func Verify(t, B, lambda int, verifyKey *VerifyKey, y *big.Int, x int) bool {
 	compare := h_x.Cmp(h2)
 	return compare == 0
 }
-
-//example usage
-//func main() {
-//	evaluateKey, verifyKey := setup()
-//	solution := evaluate(evaluateKey, 1)
-//	success := verify(verifyKey, solution, 1)
-//	fmt.Println("result: ", success)
-//	fmt.Println("finish")
-//}
