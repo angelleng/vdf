@@ -9,7 +9,7 @@ import (
 	"math/big"
 	"prime"
 	"sync"
-	"time" 
+	"time"
 )
 
 type EvalKey struct {
@@ -48,7 +48,8 @@ func computehs(hashfunc func(*big.Int) *big.Int, B int) (hs []*big.Int) {
 }
 
 func computegs(hs []*big.Int, P_inv *big.Int, N *big.Int) (gs []*big.Int) {
-	start := time.Now() 
+	fmt.Println("start compute gs")
+	start := time.Now()
 	gs = make([]*big.Int, len(hs))
 	// for i, v := range hs {
 	// 	gs[i] = big.NewInt(0)
@@ -64,6 +65,7 @@ func computegs(hs []*big.Int, P_inv *big.Int, N *big.Int) (gs []*big.Int) {
 		}(i, v)
 	}
 	wg.Wait()
+
 	t := time.Now()
 	elapsed := t.Sub(start)
 	fmt.Println("compute gs time", elapsed)
@@ -250,9 +252,14 @@ func Evaluate(t, B, lambda int, evaluateKey *EvalKey, x int) (y *big.Int) {
 	fmt.Println("g_x", g_x)
 
 	y = big.NewInt(1)
+
+	start := time.Now()
 	y.Exp(g_x, exp_coeff, N)
+	end := time.Now()
+	elapsed := end.Sub(start)
 
 	fmt.Println("y", y)
+	fmt.Println("actual evaluate time", elapsed)
 	return
 }
 
@@ -281,10 +288,14 @@ func Verify(t, B, lambda int, verifyKey *VerifyKey, y *big.Int, x int) bool {
 	}
 	h2 := big.NewInt(1)
 
+	start := time.Now()
 	h2.Exp(y, P_x, N)
+	end := time.Now()
+	elapsed := end.Sub(start)
 
 	fmt.Println("h", h_x)
 	fmt.Println("h2", h2)
+	fmt.Println("actual verify time", elapsed)
 	compare := h_x.Cmp(h2)
 	return compare == 0
 }
