@@ -9,6 +9,7 @@ import (
 	"math/big"
 	"prime"
 	"sync"
+	"time" 
 )
 
 type EvalKey struct {
@@ -47,6 +48,7 @@ func computehs(hashfunc func(*big.Int) *big.Int, B int) (hs []*big.Int) {
 }
 
 func computegs(hs []*big.Int, P_inv *big.Int, N *big.Int) (gs []*big.Int) {
+	start := time.Now() 
 	gs = make([]*big.Int, len(hs))
 	// for i, v := range hs {
 	// 	gs[i] = big.NewInt(0)
@@ -62,6 +64,9 @@ func computegs(hs []*big.Int, P_inv *big.Int, N *big.Int) (gs []*big.Int) {
 		}(i, v)
 	}
 	wg.Wait()
+	t := time.Now()
+	elapsed := t.Sub(start)
+	fmt.Println("compute gs time", elapsed)
 	return
 }
 

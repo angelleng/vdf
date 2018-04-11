@@ -1,5 +1,4 @@
 .DS_Store 
-*.prof
 *.pdf 
 # Binaries for programs and plugins
 *.exe
