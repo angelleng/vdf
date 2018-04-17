@@ -1,6 +1,8 @@
 package main
 
 import (
+	"bytes"
+	"encoding/gob"
 	"flag"
 	"fmt"
 	"log"
@@ -35,16 +37,40 @@ func main() {
 	t1 := time.Now()
 	elapsed := t1.Sub(start)
 	fmt.Println("setup time", elapsed)
-	solution := vdf.Evaluate(t, B, lambda, evaluateKey, 1)
-	t2 := time.Now()
-	elapsed = t2.Sub(t1)
-	fmt.Println("evaluate time", elapsed)
-	success := vdf.Verify(t, B, lambda, verifyKey, solution, 1)
-	t3 := time.Now()
-	elapsed = t3.Sub(t2)
-	fmt.Println("verify time", elapsed)
-	fmt.Println("result: ", success)
-	fmt.Println("finish")
+
+	var evaluator vdf.Evaluator
+	var verifier vdf.Verifier
+	evaluator.Init(t, B, lambda, evaluateKey)
+	verifier.Init(t, B, lambda, verifyKey)
+
+	w := new(bytes.Buffer)
+	e := gob.NewEncoder(w)
+	e.Encode(verifier)
+	data := w.Bytes()
+	fmt.Println("verifier storage size: ", len(data))
+
+	w2 := new(bytes.Buffer)
+	e2 := gob.NewEncoder(w2)
+	e2.Encode(evaluator)
+	data2 := w2.Bytes()
+	fmt.Println("evaluator storage size: ", len(data2))
+
+	for challenge := 0; challenge < 1; challenge++ {
+		solution := vdf.Evaluate(t, B, lambda, evaluateKey, challenge)
+		solution2 := evaluator.Eval(challenge)
+		t2 := time.Now()
+		elapsed = t2.Sub(t1)
+		fmt.Println("evaluate time", elapsed)
+
+		success := vdf.Verify(t, B, lambda, verifyKey, solution, challenge)
+		success2 := verifier.Verify(challenge, solution2)
+		t3 := time.Now()
+		elapsed = t3.Sub(t2)
+		fmt.Println("verify time", elapsed)
+		fmt.Println("result: ", success)
+		fmt.Println("result: ", success2)
+		fmt.Println("finish")
+	}
 
 	if *memprofile != "" {
 		f, err := os.Create(*memprofile)

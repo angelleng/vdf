@@ -1,3 +1,4 @@
+// Gordon's algorithm for generating strong prime
 package vdf
 
 import (

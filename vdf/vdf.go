@@ -5,6 +5,7 @@ import (
 	cryptorand "crypto/rand"
 	"crypto/sha256"
 	"encoding/gob"
+	"errors"
 	"fmt"
 	"math/big"
 	"prime"
@@ -106,6 +107,8 @@ func isStrongPrime(prime *big.Int, L []*big.Int, P *big.Int) bool {
 	resP.Div(resP, big.NewInt(2))
 	resP.Mod(resP, P)
 
+	return resP.ProbablyPrime(20)
+
 	for _, v := range L {
 		resv := new(big.Int)
 		resv.Mod(resP, v)
@@ -179,7 +182,7 @@ func generateTwoGoodPrimes(keysize int, L []*big.Int, P *big.Int) (p, q *big.Int
 	for i := 0; i < runtime.NumCPU(); i++ {
 		go func() {
 			for !found {
-				fmt.Println("trying1")
+				// fmt.Println("trying1")
 				candidate, _ := cryptorand.Prime(cryptorand.Reader, keysize)
 				if isStrongPrime(candidate, L, P) {
 					primechan <- candidate
@@ -197,6 +200,10 @@ func generateTwoGoodPrimes(keysize int, L []*big.Int, P *big.Int) (p, q *big.Int
 
 // interface
 func Setup(t, B, lambda, keysize int) (*EvalKey, *VerifyKey) {
+	if lambda >= t || lambda >= B {
+		err := errors.New("error, lambda should be less than t and B")
+		fmt.Println(err)
+	}
 	fmt.Println("\nSETUP")
 	fmt.Printf("parameters: -t=%v -B=%v -lambda=%v -keysize=%v \n", t, B, lambda, keysize)
 
@@ -211,15 +218,6 @@ func Setup(t, B, lambda, keysize int) (*EvalKey, *VerifyKey) {
 	q := big.NewInt(1)
 	N := new(big.Int)
 	p, q = generateTwoGoodPrimes(keysize, L, P)
-
-	// for !isStrongPrime(p, L, P) {
-	// 	fmt.Println("trying1")
-	// 	p, _ = cryptorand.Prime(cryptorand.Reader, keysize)
-	// }
-	// for !isStrongPrime(q, L, P) {
-	// 	fmt.Println("trying2")
-	// 	q, _ = cryptorand.Prime(cryptorand.Reader, keysize)
-	// }
 
 	N.Mul(p, q)
 
@@ -250,6 +248,70 @@ func Setup(t, B, lambda, keysize int) (*EvalKey, *VerifyKey) {
 	evaluateKey := EvalKey{N, hashfunc, gs}
 	verifyKey := VerifyKey{N, hashfunc}
 	return &evaluateKey, &verifyKey
+}
+
+type Evaluator struct {
+	T      int
+	B      int
+	Lambda int
+	L      []*big.Int
+	P      *big.Int
+	N      *big.Int
+	Gs     []*big.Int
+}
+
+func (ev *Evaluator) Init(t, B, lambda int, evaluateKey *EvalKey) {
+	start := time.Now()
+	ev.T = t
+	ev.B = B
+	ev.Lambda = lambda
+	ev.N = evaluateKey.G
+	ev.Gs = evaluateKey.Gs
+	ev.L = computeL(t)
+	ev.P = big.NewInt(1)
+	for _, v := range ev.L {
+		ev.P.Mul(ev.P, v)
+	}
+	end := time.Now()
+	elapsed := end.Sub(start)
+
+	fmt.Println("evaluator init time", elapsed)
+}
+
+func (ev *Evaluator) Eval(x int) (y *big.Int) {
+	L_ind, S_x := generateChallenge(ev.T, ev.B, ev.Lambda, x)
+	L_x := make([]*big.Int, ev.Lambda)
+	for i, v := range L_ind {
+		L_x[i] = ev.L[v]
+	}
+
+	P_x := big.NewInt(1)
+	for _, v := range L_x {
+		P_x.Mul(P_x, v)
+	}
+
+	g_x := big.NewInt(1)
+	for _, v := range S_x {
+		g_x.Mul(g_x, ev.Gs[v])
+		g_x.Mod(g_x, ev.N)
+	}
+
+	exp_coeff := big.NewInt(1)
+	exp_coeff.Div(ev.P, P_x)
+
+	fmt.Println("g_x", g_x)
+
+	y = big.NewInt(1)
+
+	start := time.Now()
+	y.Exp(g_x, exp_coeff, ev.N)
+	end := time.Now()
+	elapsed := end.Sub(start)
+
+	fmt.Println("y", y)
+	fmt.Println("actual evaluate time", elapsed)
+
+	return
 }
 
 func Evaluate(t, B, lambda int, evaluateKey *EvalKey, x int) (y *big.Int) {
@@ -295,6 +357,61 @@ func Evaluate(t, B, lambda int, evaluateKey *EvalKey, x int) (y *big.Int) {
 	fmt.Println("y", y)
 	fmt.Println("actual evaluate time", elapsed)
 	return
+}
+
+type Verifier struct {
+	T      int
+	B      int
+	Lambda int
+	N      *big.Int
+	L      []*big.Int
+	Hs     []*big.Int
+}
+
+func (vr *Verifier) Init(t, B, lambda int, verifyKey *VerifyKey) {
+	start := time.Now()
+	vr.T = t
+	vr.B = B
+	vr.Lambda = lambda
+	vr.N = verifyKey.G
+	vr.Hs = computehs(verifyKey.H, B)
+	vr.L = computeL(t)
+
+	end := time.Now()
+	elapsed := end.Sub(start)
+
+	fmt.Println("verifier init time", elapsed)
+}
+
+func (vr *Verifier) Verify(x int, y *big.Int) bool {
+	L_ind, S_x := generateChallenge(vr.T, vr.B, vr.Lambda, x)
+	L_x := make([]*big.Int, vr.Lambda)
+	for i, v := range L_ind {
+		L_x[i] = vr.L[v]
+	}
+
+	P_x := big.NewInt(1)
+	for _, v := range L_x {
+		P_x.Mul(P_x, v)
+	}
+
+	h_x := big.NewInt(1)
+	for _, v := range S_x {
+		h_x.Mul(h_x, vr.Hs[v])
+		h_x.Mod(h_x, vr.N)
+	}
+	h2 := big.NewInt(1)
+
+	start := time.Now()
+	h2.Exp(y, P_x, vr.N)
+	end := time.Now()
+	elapsed := end.Sub(start)
+
+	fmt.Println("h", h_x)
+	fmt.Println("h2", h2)
+	fmt.Println("actual verify time", elapsed)
+	compare := h_x.Cmp(h2)
+	return compare == 0
 }
 
 func Verify(t, B, lambda int, verifyKey *VerifyKey, y *big.Int, x int) bool {
