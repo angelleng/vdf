@@ -12,6 +12,19 @@ import (
 	"vdf"
 )
 
+func HumanSize(b int) string {
+	const unit = 1024
+	if b < unit {
+		return fmt.Sprintf("%d B", b)
+	}
+	div, exp := unit, 0
+	for n := b / unit; n >= unit; n /= unit {
+		div *= unit
+		exp++
+	}
+	return fmt.Sprintf("%.1f%cB", float32(b)/float32(div), "KMGTPE"[exp])
+}
+
 func main() {
 
 	var t, B, lambda, keysize int
@@ -47,27 +60,30 @@ func main() {
 	e := gob.NewEncoder(w)
 	e.Encode(verifier)
 	data := w.Bytes()
-	fmt.Println("verifier storage size: ", len(data))
+	// fmt.Println("verifier storage size: ", len(data))
+	fmt.Println("verifier storage size: ", HumanSize(len(data)))
 
 	w2 := new(bytes.Buffer)
 	e2 := gob.NewEncoder(w2)
 	e2.Encode(evaluator)
 	data2 := w2.Bytes()
-	fmt.Println("evaluator storage size: ", len(data2))
+	// fmt.Println("evaluator storage size: ", len(data2))
+	fmt.Println("evaluator storage size: ", HumanSize(len(data2)))
 
 	for challenge := 0; challenge < 1; challenge++ {
-		solution := vdf.Evaluate(t, B, lambda, evaluateKey, challenge)
+		// solution := vdf.Evaluate(t, B, lambda, evaluateKey, challenge)
+		t1 = time.Now()
 		solution2 := evaluator.Eval(challenge)
 		t2 := time.Now()
 		elapsed = t2.Sub(t1)
 		fmt.Println("evaluate time", elapsed)
 
-		success := vdf.Verify(t, B, lambda, verifyKey, solution, challenge)
+		// success := vdf.Verify(t, B, lambda, verifyKey, solution, challenge)
 		success2 := verifier.Verify(challenge, solution2)
 		t3 := time.Now()
 		elapsed = t3.Sub(t2)
 		fmt.Println("verify time", elapsed)
-		fmt.Println("result: ", success)
+		// fmt.Println("result: ", success)
 		fmt.Println("result: ", success2)
 		fmt.Println("finish")
 	}

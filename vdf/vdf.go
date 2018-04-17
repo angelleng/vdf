@@ -279,6 +279,7 @@ func (ev *Evaluator) Init(t, B, lambda int, evaluateKey *EvalKey) {
 }
 
 func (ev *Evaluator) Eval(x int) (y *big.Int) {
+	t1 := time.Now()
 	L_ind, S_x := generateChallenge(ev.T, ev.B, ev.Lambda, x)
 	L_x := make([]*big.Int, ev.Lambda)
 	for i, v := range L_ind {
@@ -300,6 +301,9 @@ func (ev *Evaluator) Eval(x int) (y *big.Int) {
 	exp_coeff.Div(ev.P, P_x)
 
 	fmt.Println("g_x", g_x)
+	t2 := time.Now()
+	elapsed1 := t2.Sub(t1)
+	fmt.Println("evaluate prepare time", elapsed1)
 
 	y = big.NewInt(1)
 
@@ -384,6 +388,8 @@ func (vr *Verifier) Init(t, B, lambda int, verifyKey *VerifyKey) {
 }
 
 func (vr *Verifier) Verify(x int, y *big.Int) bool {
+	t1 := time.Now()
+
 	L_ind, S_x := generateChallenge(vr.T, vr.B, vr.Lambda, x)
 	L_x := make([]*big.Int, vr.Lambda)
 	for i, v := range L_ind {
@@ -401,6 +407,10 @@ func (vr *Verifier) Verify(x int, y *big.Int) bool {
 		h_x.Mod(h_x, vr.N)
 	}
 	h2 := big.NewInt(1)
+
+	t2 := time.Now()
+	elapsed1 := t2.Sub(t1)
+	fmt.Println("verify preparation time", elapsed1)
 
 	start := time.Now()
 	h2.Exp(y, P_x, vr.N)
