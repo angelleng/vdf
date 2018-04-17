@@ -60,15 +60,24 @@ func main() {
 	e := gob.NewEncoder(w)
 	e.Encode(verifier)
 	data := w.Bytes()
-	// fmt.Println("verifier storage size: ", len(data))
 	fmt.Println("verifier storage size: ", HumanSize(len(data)))
 
-	w2 := new(bytes.Buffer)
-	e2 := gob.NewEncoder(w2)
-	e2.Encode(evaluator)
-	data2 := w2.Bytes()
-	// fmt.Println("evaluator storage size: ", len(data2))
+	w.Reset()
+	e.Encode(evaluator)
+	data2 := w.Bytes()
 	fmt.Println("evaluator storage size: ", HumanSize(len(data2)))
+
+	w.Reset()
+	e.Encode(evaluateKey)
+	fmt.Println("eval key size: ", HumanSize(w.Len()))
+
+	w.Reset()
+	e.Encode(evaluator.Gs)
+	fmt.Println("Gs size: ", HumanSize(w.Len()))
+
+	w.Reset()
+	e.Encode(verifier.Hs)
+	fmt.Println("Hs size: ", HumanSize(w.Len()))
 
 	for challenge := 0; challenge < 1; challenge++ {
 		// solution := vdf.Evaluate(t, B, lambda, evaluateKey, challenge)

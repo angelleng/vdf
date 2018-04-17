@@ -232,13 +232,17 @@ func Setup(t, B, lambda, keysize int) (*EvalKey, *VerifyKey) {
 
 	hashfunc := func(input *big.Int) (hashval *big.Int) {
 		h := sha256.New()
-		h.Write(input.Bytes())
-		shasum := h.Sum(nil)
+		var shasum []byte
+		for len(shasum)*8 < N.BitLen() {
+			h.Write(input.Bytes())
+			shasum = h.Sum(shasum)
+		}
 		hashval = big.NewInt(0)
 		hashval.SetBytes(shasum)
 		hashval.Mod(hashval, N)
 		return
 	}
+
 	P_inv := big.NewInt(1)
 	P_inv.ModInverse(P, phi)
 
