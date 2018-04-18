@@ -56,20 +56,9 @@ func computegs(hs []*big.Int, P_inv *big.Int, N *big.Int) (gs []*big.Int) {
 	fmt.Println("start compute gs")
 	start := time.Now()
 	gs = make([]*big.Int, len(hs))
-	// for i, v := range hs {
-	// 	gs[i] = big.NewInt(0)
-	// 	gs[i].Exp(v, P_inv, N)
-	// }
 
 	var wg sync.WaitGroup
 	wg.Add(len(hs))
-	// for i, v := range hs {
-	// 	go func(i int, v *big.Int) {
-	// 		defer wg.Done()
-	// 		gs[i] = big.NewInt(0)
-	// 		gs[i].Exp(v, P_inv, N)
-	// 	}(i, v)
-	// }
 
 	input := make(chan int, 10)
 
@@ -377,7 +366,7 @@ type Verifier struct {
 	Lambda int
 	N      *big.Int
 	L      []*big.Int
-	Hs     []*big.Int
+	Hash   func(*big.Int) *big.Int
 }
 
 func (vr *Verifier) Init(t, B, lambda int, verifyKey *VerifyKey) {
@@ -386,8 +375,8 @@ func (vr *Verifier) Init(t, B, lambda int, verifyKey *VerifyKey) {
 	vr.B = B
 	vr.Lambda = lambda
 	vr.N = verifyKey.G
-	vr.Hs = computehs(verifyKey.H, B)
 	vr.L = computeL(t)
+	vr.Hash = verifyKey.H
 
 	end := time.Now()
 	elapsed := end.Sub(start)
@@ -411,7 +400,8 @@ func (vr *Verifier) Verify(x int, y *big.Int) bool {
 
 	h_x := big.NewInt(1)
 	for _, v := range S_x {
-		h_x.Mul(h_x, vr.Hs[v])
+		h := vr.Hash(big.NewInt(int64(v)))
+		h_x.Mul(h_x, h)
 		h_x.Mod(h_x, vr.N)
 	}
 	h2 := big.NewInt(1)
