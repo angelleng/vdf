@@ -29,7 +29,10 @@ type VerifyKey struct {
 func computeL(t int) (L []*big.Int) {
 	primes := prime.Primes(16485863)
 	if len(primes) < t {
-		primes = prime.Primes(116485863)
+		primes = prime.Primes(2038074751)
+	}
+	if len(primes) < t {
+		primes = prime.Primes(22563323963)
 	}
 	if len(primes) < t {
 		fmt.Println("error: not enough primes generated.")
@@ -129,7 +132,6 @@ func generateChallenge(t, B, lambda int, X interface{}) (Ind_L, Ind_S []int) {
 	h := sha256.New()
 	Ind_L = make([]int, 0, lambda)
 
-	fmt.Println("genChallenge")
 	for i := 0; i < lambda; {
 		dupe := false
 		h.Write(data)
@@ -150,7 +152,6 @@ func generateChallenge(t, B, lambda int, X interface{}) (Ind_L, Ind_S []int) {
 		}
 	}
 
-	fmt.Println("genChallenge")
 	Ind_S = make([]int, 0, lambda)
 	for i := 0; i < lambda; {
 		dupe := false
@@ -171,7 +172,6 @@ func generateChallenge(t, B, lambda int, X interface{}) (Ind_L, Ind_S []int) {
 			i++
 		}
 	}
-	fmt.Println("genChallenge")
 	return
 }
 
@@ -244,7 +244,11 @@ func Setup(t, B, lambda, keysize int) (*EvalKey, *VerifyKey) {
 	}
 
 	P_inv := big.NewInt(1)
+	t1 := time.Now()
 	P_inv.ModInverse(P, phi)
+	t2 := time.Now()
+	elapsed := t2.Sub(t1)
+	fmt.Println("gen 1/P time: ", elapsed)
 
 	hs := computehs(hashfunc, B)
 	gs := computegs(hs, P_inv, N)
@@ -307,7 +311,6 @@ func (ev *Evaluator) Eval(x int) (y *big.Int) {
 	fmt.Println("g_x", g_x)
 	t2 := time.Now()
 	elapsed1 := t2.Sub(t1)
-	fmt.Println("evaluate prepare time", elapsed1)
 
 	y = big.NewInt(1)
 
@@ -317,6 +320,7 @@ func (ev *Evaluator) Eval(x int) (y *big.Int) {
 	elapsed := end.Sub(start)
 
 	fmt.Println("y", y)
+	fmt.Println("evaluate prepare time", elapsed1)
 	fmt.Println("actual evaluate time", elapsed)
 
 	return
@@ -414,7 +418,6 @@ func (vr *Verifier) Verify(x int, y *big.Int) bool {
 
 	t2 := time.Now()
 	elapsed1 := t2.Sub(t1)
-	fmt.Println("verify preparation time", elapsed1)
 
 	start := time.Now()
 	h2.Exp(y, P_x, vr.N)
@@ -423,6 +426,7 @@ func (vr *Verifier) Verify(x int, y *big.Int) bool {
 
 	fmt.Println("h", h_x)
 	fmt.Println("h2", h2)
+	fmt.Println("verify prepare time", elapsed1)
 	fmt.Println("actual verify time", elapsed)
 	compare := h_x.Cmp(h2)
 	return compare == 0

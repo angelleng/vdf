@@ -59,25 +59,40 @@ func main() {
 	w := new(bytes.Buffer)
 	e := gob.NewEncoder(w)
 	e.Encode(verifier)
-	fmt.Println("verifier storage size: ", HumanSize(w.Len()))
+	fmt.Printf("verifier storage size: %v (%v B)\n", HumanSize(w.Len()), w.Len())
 
 	w.Reset()
 	e.Encode(evaluator)
-	fmt.Println("evaluator storage size: ", HumanSize(w.Len()))
+	fmt.Printf("evaluator storage size: %v (%v B)\n", HumanSize(w.Len()), w.Len())
 
 	w.Reset()
 	e.Encode(evaluateKey)
-	fmt.Println("eval key size: ", HumanSize(w.Len()))
+	fmt.Printf("eval key size: %v (%v B)\n", HumanSize(w.Len()), w.Len())
 
 	w.Reset()
 	e.Encode(evaluator.Gs)
-	fmt.Println("Gs size: ", HumanSize(w.Len()))
+	fmt.Printf("Gs size: %v (%v B)\n", HumanSize(w.Len()), w.Len())
 
 	w.Reset()
 	e.Encode(verifier.Hs)
-	fmt.Println("Hs size: ", HumanSize(w.Len()))
+	fmt.Printf("Hs size: %v (%v B)\n", HumanSize(w.Len()), w.Len())
 
-	for challenge := 0; challenge < 10; challenge++ {
+	w.Reset()
+	e.Encode(evaluator.P)
+	fmt.Printf("P size: %v (%v B)\n", HumanSize(w.Len()), w.Len())
+
+	w.Reset()
+	e.Encode(evaluator.L)
+	fmt.Printf("L size: %v (%v B)\n", HumanSize(w.Len()), w.Len())
+
+	bitlen := 0
+	for _, v := range evaluator.L {
+		bitlen += v.BitLen()
+	}
+	fmt.Println("elements in L size: ", bitlen)
+
+	for challenge := 0; challenge < 3; challenge++ {
+		fmt.Println(" ")
 		// solution := vdf.Evaluate(t, B, lambda, evaluateKey, challenge)
 		t1 = time.Now()
 		solution2 := evaluator.Eval(challenge)
