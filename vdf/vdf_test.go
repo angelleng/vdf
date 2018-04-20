@@ -2,7 +2,9 @@ package vdf
 
 import (
 	"fmt"
+	"math/big"
 	"testing"
+	"time"
 )
 
 func TestGenerateChallenge(t *testing.T) {
@@ -10,4 +12,28 @@ func TestGenerateChallenge(t *testing.T) {
 	t.Log("test\n")
 	t.Log(ind_L)
 	fmt.Println(ind_S)
+}
+
+func TestProduct(t *testing.T) {
+	primes := computeL(1000000)
+	start := time.Now()
+	product := Product(primes)
+	// fmt.Println(product)
+	t1 := time.Now()
+	elapsed := t1.Sub(start)
+	fmt.Println("time 1: ", elapsed)
+
+	primes = computeL(1000000)
+	P := big.NewInt(1)
+	t1 = time.Now()
+	for _, v := range primes {
+		P.Mul(P, v)
+	}
+	t2 := time.Now()
+	elapsed = t2.Sub(t1)
+	fmt.Println("time 2: ", elapsed)
+	// fmt.Println(P)
+	if P.Cmp(product) != 0 {
+		t.Error("noo")
+	}
 }

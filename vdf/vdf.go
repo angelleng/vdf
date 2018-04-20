@@ -12,6 +12,8 @@ import (
 	"runtime"
 	"sync"
 	"time"
+
+	"github.com/onrik/gomerkle"
 )
 
 type EvalKey struct {
@@ -187,6 +189,56 @@ func generateTwoGoodPrimes(keysize int, L []*big.Int, P *big.Int) (p, q *big.Int
 	return
 }
 
+func Product(array []*big.Int) (prod *big.Int) {
+	type pair struct {
+		a *big.Int
+		b *big.Int
+	}
+	singles := make(chan *big.Int, len(array))
+	doubles := make(chan pair, 100)
+
+	go func() {
+		for _, v := range array {
+			// fmt.Println("add ", v)
+			singles <- v
+		}
+	}()
+
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		for {
+			a := <-singles
+			select {
+			case b := <-singles:
+				doubles <- pair{a, b}
+			case <-time.After(10 * time.Millisecond):
+				fmt.Println("timeout 1")
+				prod = a
+				close(doubles)
+				wg.Done()
+				return
+			}
+		}
+	}()
+
+	for i := 0; i < runtime.NumCPU(); i++ {
+		go func() {
+			for {
+				ab, ok := <-doubles
+				if !ok {
+					return
+				}
+				a := ab.a
+				b := ab.b
+				singles <- big.NewInt(0).Mul(a, b)
+			}
+		}()
+	}
+	wg.Wait()
+	return
+}
+
 // interface
 func Setup(t, B, lambda, keysize int) (*EvalKey, *VerifyKey) {
 	if lambda >= t || lambda >= B {
@@ -257,6 +309,12 @@ type Evaluator struct {
 	Gs     []*big.Int
 }
 
+type Proof struct {
+	y           *big.Int       // solution
+	L_x         []*big.Int     // primes
+	MerkleProof gomerkle.Proof // proof of merkle tree
+}
+
 func (ev *Evaluator) Init(t, B, lambda int, evaluateKey *EvalKey) {
 	start := time.Now()
 	ev.T = t
@@ -273,6 +331,9 @@ func (ev *Evaluator) Init(t, B, lambda int, evaluateKey *EvalKey) {
 	elapsed := end.Sub(start)
 
 	fmt.Println("evaluator init time", elapsed)
+	tree := gomerkle.NewTree(sha256.New())
+	fmt.Println("tree", tree)
+
 }
 
 func (ev *Evaluator) Eval(x int) (y *big.Int) {
