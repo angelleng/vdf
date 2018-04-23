@@ -206,20 +206,16 @@ func Product(array []*big.Int) (prod *big.Int) {
 
 	var wg sync.WaitGroup
 	wg.Add(1)
+
 	go func() {
-		for {
+		for i := 0; i < len(array)-1; i++ {
 			a := <-singles
-			select {
-			case b := <-singles:
-				doubles <- pair{a, b}
-			case <-time.After(10 * time.Millisecond):
-				fmt.Println("timeout 1")
-				prod = a
-				close(doubles)
-				wg.Done()
-				return
-			}
+			b := <-singles
+			doubles <- pair{a, b}
 		}
+		prod = <-singles
+		close(doubles)
+		wg.Done()
 	}()
 
 	for i := 0; i < runtime.NumCPU(); i++ {

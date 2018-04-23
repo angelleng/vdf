@@ -15,7 +15,10 @@ func TestGenerateChallenge(t *testing.T) {
 }
 
 func TestProduct(t *testing.T) {
-	primes := computeL(1000000)
+	length := 800000
+	fmt.Println("t=", length)
+
+	primes := computeL(length)
 	start := time.Now()
 	product := Product(primes)
 	// fmt.Println(product)
@@ -23,7 +26,7 @@ func TestProduct(t *testing.T) {
 	elapsed := t1.Sub(start)
 	fmt.Println("time 1: ", elapsed)
 
-	primes = computeL(1000000)
+	primes = computeL(length)
 	P := big.NewInt(1)
 	t1 = time.Now()
 	for _, v := range primes {
