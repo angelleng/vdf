@@ -1,6 +1,7 @@
 package vdf
 
 import (
+	"container/heap"
 	"fmt"
 	"math/big"
 	"testing"
@@ -15,7 +16,7 @@ func TestGenerateChallenge(t *testing.T) {
 }
 
 func TestProduct(t *testing.T) {
-	length := 800000
+	length := 200000
 	fmt.Println("t=", length)
 
 	primes := computeL(length)
@@ -39,5 +40,21 @@ func TestProduct(t *testing.T) {
 	// fmt.Println(P)
 	if P.Cmp(prod) != 0 {
 		t.Error("noo")
+	}
+}
+
+func TestPriorityQueue(t *testing.T) {
+	pq := &PriorityQueue{}
+	heap.Init(pq)
+	heap.Push(pq, big.NewInt(3))
+	heap.Push(pq, big.NewInt(1))
+	heap.Push(pq, big.NewInt(5))
+	heap.Push(pq, big.NewInt(2))
+	heap.Push(pq, big.NewInt(8))
+	fmt.Printf("minimum: %d\n", (*pq)[0])
+	fmt.Printf("%v ", *pq)
+	for pq.Len() > 0 {
+		fmt.Printf("%d ", heap.Pop(pq))
+		fmt.Printf("%v ", *pq)
 	}
 }
