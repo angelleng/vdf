@@ -189,7 +189,7 @@ func generateTwoGoodPrimes(keysize int, L []*big.Int, P *big.Int) (p, q *big.Int
 	return
 }
 
-func Product(array []*big.Int) (prod *big.Int) {
+func product(array []*big.Int) (prod *big.Int) {
 	type pair struct {
 		a *big.Int
 		b *big.Int
@@ -246,10 +246,8 @@ func Setup(t, B, lambda, keysize int) (*EvalKey, *VerifyKey) {
 
 	L := computeL(t)
 	fmt.Printf("L [%v %v %v %v ... %v %v %v] \n", L[0], L[1], L[2], L[3], L[len(L)-3], L[len(L)-2], L[len(L)-1])
-	P := big.NewInt(1)
-	for _, v := range L {
-		P.Mul(P, v)
-	}
+
+	P := product(L)
 
 	p := big.NewInt(1)
 	q := big.NewInt(1)
@@ -319,10 +317,7 @@ func (ev *Evaluator) Init(t, B, lambda int, evaluateKey *EvalKey) {
 	ev.N = evaluateKey.G
 	ev.Gs = evaluateKey.Gs
 	ev.L = computeL(t)
-	ev.P = big.NewInt(1)
-	for _, v := range ev.L {
-		ev.P.Mul(ev.P, v)
-	}
+	ev.P = product(ev.L)
 	end := time.Now()
 	elapsed := end.Sub(start)
 

@@ -20,8 +20,8 @@ func TestProduct(t *testing.T) {
 
 	primes := computeL(length)
 	start := time.Now()
-	product := Product(primes)
-	// fmt.Println(product)
+	prod := product(primes)
+	// fmt.Println(prod)
 	t1 := time.Now()
 	elapsed := t1.Sub(start)
 	fmt.Println("time 1: ", elapsed)
@@ -33,10 +33,11 @@ func TestProduct(t *testing.T) {
 		P.Mul(P, v)
 	}
 	t2 := time.Now()
-	elapsed = t2.Sub(t1)
-	fmt.Println("time 2: ", elapsed)
+	elapsed2 := t2.Sub(t1)
+	fmt.Println("time 2: ", elapsed2)
+	fmt.Printf("ratio: %.2f\n", float64(elapsed2)/float64(elapsed))
 	// fmt.Println(P)
-	if P.Cmp(product) != 0 {
+	if P.Cmp(prod) != 0 {
 		t.Error("noo")
 	}
 }
