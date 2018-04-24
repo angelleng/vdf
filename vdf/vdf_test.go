@@ -16,7 +16,7 @@ func TestGenerateChallenge(t *testing.T) {
 }
 
 func TestProduct(t *testing.T) {
-	length := 200000
+	length := 1000000
 	fmt.Println("t=", length)
 
 	primes := computeL(length)
