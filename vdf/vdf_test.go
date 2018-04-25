@@ -22,25 +22,25 @@ func TestProduct(t *testing.T) {
 	primes := computeL(length)
 	start := time.Now()
 	prod := product(primes)
-	// fmt.Println(prod)
+	fmt.Println("length of product: ", prod.BitLen())
 	t1 := time.Now()
 	elapsed := t1.Sub(start)
 	fmt.Println("time 1: ", elapsed)
 
-	primes = computeL(length)
-	P := big.NewInt(1)
-	t1 = time.Now()
-	for _, v := range primes {
-		P.Mul(P, v)
-	}
-	t2 := time.Now()
-	elapsed2 := t2.Sub(t1)
-	fmt.Println("time 2: ", elapsed2)
-	fmt.Printf("ratio: %.2f\n", float64(elapsed2)/float64(elapsed))
-	// fmt.Println(P)
-	if P.Cmp(prod) != 0 {
-		t.Error("noo")
-	}
+	// primes = computeL(length)
+	// P := big.NewInt(1)
+	// t1 = time.Now()
+	// for _, v := range primes {
+	// 	P.Mul(P, v)
+	// }
+	// t2 := time.Now()
+	// elapsed2 := t2.Sub(t1)
+	// fmt.Println("time 2: ", elapsed2)
+	// fmt.Printf("ratio: %.2f\n", float64(elapsed2)/float64(elapsed))
+	// // fmt.Println(P)
+	// if P.Cmp(prod) != 0 {
+	// 	t.Error("boo")
+	// }
 }
 
 func TestPriorityQueue(t *testing.T) {

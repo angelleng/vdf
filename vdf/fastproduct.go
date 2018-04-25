@@ -32,14 +32,68 @@ func product(array []*big.Int) (prod *big.Int) {
 		a *big.Int
 		b *big.Int
 	}
-	singles := make(chan *big.Int, len(array))
-	big2 := make(chan *big.Int, len(array))
-	doubles := make(chan pair, len(array)/2)
+	workers := 2
+	singles := make(chan *big.Int, len(array)/2)
+	big2 := make(chan *big.Int, 1)
+	doubles := make(chan pair, 1)
 	// start := time.Now()
 
-	go func() { // insert all elements to singles
-		for i := len(array) - 1; i >= 0; i-- {
-			singles <- array[i]
+	pq := PriorityQueue(append([]*big.Int(nil), array...))
+	heap.Init(&pq)
+	// biggest := make([]*big.Int, workers*2)
+	// for i, _ := range biggest {
+	// 	biggest[i] = heap.Pop(&pq).(*big.Int)
+	// }
+	// mu := &sync.Mutex{}
+
+	// go func() {
+	// 	for {
+	// 		item, ok := <-singles
+	// 		mu.Lock()
+	// 		if !ok {
+	// 			return
+	// 		}
+	// 		fmt.Println("read from singles", item.BitLen())
+	// 		fmt.Println("lock and sort")
+	// 		heap.Push(&pq, item)
+	// 		mu.Unlock()
+	// 	}
+	// }()
+
+	// go func() {
+	// 	for {
+	// 		if len(pq) != 0 {
+	// 			mu.Lock()
+	// 			big2 <- pq[0]
+	// 			fmt.Println("push to big2", pq[0].BitLen())
+	// 			heap.Pop(&pq)
+	// 			mu.Unlock()
+	// 		} else {
+	// 			fmt.Println("pq is empty")
+	// 			time.Sleep(1 * time.Microsecond)
+	// 		}
+	// 	}
+	// }()
+
+	go func() {
+		for {
+			select {
+			case item, ok := <-singles:
+				if !ok {
+					return
+				}
+				// fmt.Println("read from singles", item.BitLen())
+				heap.Push(&pq, item)
+			default:
+			}
+			if len(pq) != 0 {
+				select {
+				case big2 <- pq[0]:
+					// fmt.Println("push to big2", pq[0].BitLen())
+					heap.Pop(&pq)
+				default:
+				}
+			}
 		}
 	}()
 
@@ -50,19 +104,20 @@ func product(array []*big.Int) (prod *big.Int) {
 		for i := 0; i < len(array)-1; i++ {
 			a := <-big2
 			b := <-big2
-			sent := false
-			for !sent {
-				select {
-				case doubles <- pair{a, b}:
-					sent = true
-				default:
-					// tnow := time.Now()
-					// elapsed := tnow.Sub(start)
-					// fmt.Println("waiting to send to double, time: ", elapsed)
-					fmt.Println("waiting to send to double")
-					// time.Sleep(2 * time.Second)
-				}
-			}
+			doubles <- pair{a, b}
+			// sent := false
+			// for !sent {
+			// 	select {
+			// 	case doubles <- pair{a, b}:
+			// 		sent = true
+			// 	default:
+			// 		// tnow := time.Now()
+			// 		// elapsed := tnow.Sub(start)
+			// 		// fmt.Println("waiting to send to double, time: ", elapsed)
+			// 		// fmt.Println("waiting to send to double")
+			// 		// time.Sleep(2 * time.Second)
+			// 	}
+			// }
 		}
 		close(doubles)
 		fmt.Println("reading result")
@@ -72,56 +127,41 @@ func product(array []*big.Int) (prod *big.Int) {
 		wg.Done()
 	}()
 
-	go func() {
-		pq := &PriorityQueue{}
-		heap.Init(pq)
-		for {
-			if len(*pq) != 0 {
-				select {
-				case item, ok := <-singles:
-					if !ok {
-						return
-					}
-					heap.Push(pq, item)
-				case big2 <- (*pq)[0]:
-					heap.Pop(pq)
-				}
-			} else {
-				item := <-singles
-				heap.Push(pq, item)
-			}
-		}
-	}()
-
-	for i := 0; i < 100; i++ { // workers multiplies two elements passed from doubles
+	for i := 0; i < workers; i++ { // workers multiplies two elements passed from doubles
 		go func(i int) {
 			for {
-				select {
-				case ab, ok := <-doubles:
-					if !ok {
-						fmt.Println("doubles closed")
-						return
-					}
-					a := ab.a
-					b := ab.b
-					fmt.Printf("length (%v, %v), worker %v\n", a.BitLen(), b.BitLen(), i)
-					singles <- big.NewInt(0).Mul(a, b)
-				default:
-					//tnow := time.Now()
-					//elapsed2 := tnow.Sub(start)
-					// fmt.Printf("waiting on doubles, worker %v, %v since start.\n", i, elapsed2)
-					// fmt.Printf("waiting on doubles, worker %v\n", i)
-					// time.Sleep(1 * time.Second)
-				}
-
-				// ab, ok := <-doubles
-				// if !ok {
-				// 	fmt.Println("doubles closed")
-				// 	return
+				// select {
+				// case ab, ok := <-doubles:
+				// 	if !ok {
+				// 		fmt.Println("doubles closed")
+				// 		return
+				// 	}
+				// 	a := ab.a
+				// 	b := ab.b
+				// 	tnow := time.Now()
+				// 	elapsed2 := tnow.Sub(start)
+				// 	fmt.Printf("length (%v, %v), worker %v, %v since start.\n", a.BitLen(), b.BitLen(), i, elapsed2)
+				// 	singles <- big.NewInt(0).Mul(a, b)
+				// default:
+				// 	tnow := time.Now()
+				// 	elapsed2 := tnow.Sub(start)
+				// 	fmt.Printf("waiting on doubles, worker %v, %v since start.\n", i, elapsed2)
+				// 	// fmt.Printf("waiting on doubles, worker %v\n", i)
+				// 	time.Sleep(1 * time.Millisecond)
 				// }
-				// a := ab.a
-				// b := ab.b
-				// singles <- big.NewInt(0).Mul(a, b)
+
+				ab, ok := <-doubles
+				if !ok {
+					fmt.Println("doubles closed")
+					return
+				}
+				a := ab.a
+				b := ab.b
+				// tnow := time.Now()
+				// elapsed2 := tnow.Sub(start)
+				// fmt.Printf("length (%v, %v), worker %v, %v since start.\n", a.BitLen(), b.BitLen(), i, elapsed2)
+				// fmt.Printf("length (%v, %v), worker %v\n", a.BitLen(), b.BitLen(), i)
+				singles <- big.NewInt(0).Mul(a, b)
 			}
 		}(i)
 	}
