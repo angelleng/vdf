@@ -201,7 +201,7 @@ func Setup(t, B, lambda, keysize int) (*EvalKey, *VerifyKey) {
 	L := computeL(t)
 	fmt.Printf("L [%v %v %v %v ... %v %v %v] \n", L[0], L[1], L[2], L[3], L[len(L)-3], L[len(L)-2], L[len(L)-1])
 
-	P := product(L)
+	P := product1(L)
 
 	p := big.NewInt(1)
 	q := big.NewInt(1)
@@ -271,7 +271,7 @@ func (ev *Evaluator) Init(t, B, lambda int, evaluateKey *EvalKey) {
 	ev.N = evaluateKey.G
 	ev.Gs = evaluateKey.Gs
 	ev.L = computeL(t)
-	ev.P = product(ev.L)
+	ev.P = product1(ev.L)
 	end := time.Now()
 	elapsed := end.Sub(start)
 
