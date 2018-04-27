@@ -17,30 +17,70 @@ func TestGenerateChallenge(t *testing.T) {
 
 func TestProduct(t *testing.T) {
 	length := 1000000
+	phi := big.NewInt(896655229516)
 	fmt.Println("t=", length)
 
 	primes := computeL(length)
 	start := time.Now()
-	prod := product(primes)
+	prod := product1(primes, phi)
 	fmt.Println("length of product: ", prod.BitLen())
 	t1 := time.Now()
 	elapsed := t1.Sub(start)
 	fmt.Println("time 1: ", elapsed)
 
-	// primes = computeL(length)
-	// P := big.NewInt(1)
-	// t1 = time.Now()
-	// for _, v := range primes {
-	// 	P.Mul(P, v)
-	// }
-	// t2 := time.Now()
-	// elapsed2 := t2.Sub(t1)
-	// fmt.Println("time 2: ", elapsed2)
-	// fmt.Printf("ratio: %.2f\n", float64(elapsed2)/float64(elapsed))
-	// // fmt.Println(P)
-	// if P.Cmp(prod) != 0 {
-	// 	t.Error("boo")
-	// }
+	primes = computeL(length)
+	P := big.NewInt(1)
+	t1 = time.Now()
+	for _, v := range primes {
+		P.Mul(P, v)
+		P.Mod(P, phi)
+	}
+	t2 := time.Now()
+	elapsed2 := t2.Sub(t1)
+	fmt.Println("time 2: ", elapsed2)
+	fmt.Printf("ratio: %.2f\n", float64(elapsed2)/float64(elapsed))
+	// fmt.Println(P)
+	if P.Cmp(prod) != 0 {
+		t.Error("boo")
+	}
+
+}
+
+func TestProductMod(t *testing.T) {
+	length := 100000
+	phi := big.NewInt(896655229516)
+	fmt.Println("t=", length)
+
+	primes := computeL(length)
+	P := big.NewInt(1)
+	t1 := time.Now()
+	for _, v := range primes {
+		P.Mul(P, v)
+		P.Mod(P, phi)
+	}
+	t2 := time.Now()
+	elapsed1 := t2.Sub(t1)
+	fmt.Println("time 1: ", elapsed1)
+	// fmt.Println(P)
+
+	P_inv := big.NewInt(1)
+	P_inv.ModInverse(P, phi)
+
+	P = big.NewInt(1)
+	t1 = time.Now()
+	for _, v := range primes {
+		P.Mul(P, v)
+	}
+	t2 = time.Now()
+	elapsed2 := t2.Sub(t1)
+	fmt.Println("time 2: ", elapsed2)
+	P_inv_2 := big.NewInt(1)
+	P_inv_2.ModInverse(P, phi)
+	// fmt.Println(P)
+
+	if P_inv.Cmp(P_inv_2) != 0 {
+		t.Error("boo")
+	}
 }
 
 func TestPriorityQueue(t *testing.T) {

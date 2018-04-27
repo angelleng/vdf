@@ -74,10 +74,6 @@ func main() {
 	fmt.Printf("Gs size: %v (%v B)\n", HumanSize(w.Len()), w.Len())
 
 	w.Reset()
-	e.Encode(evaluator.P)
-	fmt.Printf("P size: %v (%v B)\n", HumanSize(w.Len()), w.Len())
-
-	w.Reset()
 	e.Encode(evaluator.L)
 	fmt.Printf("L size: %v (%v B)\n", HumanSize(w.Len()), w.Len())
 

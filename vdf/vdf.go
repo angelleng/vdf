@@ -88,29 +88,17 @@ func computegs(hs []*big.Int, P_inv *big.Int, N *big.Int) (gs []*big.Int) {
 	}
 
 	wg.Wait()
-
 	t := time.Now()
 	elapsed := t.Sub(start)
 	fmt.Println("compute gs time", elapsed)
 	return
 }
 
-func isStrongPrime(prime *big.Int, L []*big.Int, P *big.Int) bool {
-	resP := new(big.Int)
-	resP.Sub(prime, big.NewInt(1))
-	resP.Div(resP, big.NewInt(2))
-	resP.Mod(resP, P)
-
-	return resP.ProbablyPrime(20)
-
-	for _, v := range L {
-		resv := new(big.Int)
-		resv.Mod(resP, v)
-		if resv.Sign() == 0 {
-			return false
-		}
-	}
-	return true
+func isStrongPrime(prime *big.Int, L []*big.Int) bool {
+	half := new(big.Int)
+	half.Sub(prime, big.NewInt(1))
+	half.Div(half, big.NewInt(2))
+	return half.ProbablyPrime(20)
 }
 
 func generateChallenge(t, B, lambda int, X interface{}) (Ind_L, Ind_S []int) {
@@ -166,7 +154,7 @@ func generateChallenge(t, B, lambda int, X interface{}) (Ind_L, Ind_S []int) {
 	return
 }
 
-func generateTwoGoodPrimes(keysize int, L []*big.Int, P *big.Int) (p, q *big.Int) {
+func generateTwoGoodPrimes(keysize int, L []*big.Int) (p, q *big.Int) {
 	primechan := make(chan *big.Int)
 	found := false
 	fmt.Println("no of cores: ", runtime.NumCPU())
@@ -175,7 +163,7 @@ func generateTwoGoodPrimes(keysize int, L []*big.Int, P *big.Int) (p, q *big.Int
 			for !found {
 				// fmt.Println("trying1")
 				candidate, _ := cryptorand.Prime(cryptorand.Reader, keysize)
-				if isStrongPrime(candidate, L, P) {
+				if isStrongPrime(candidate, L) {
 					primechan <- candidate
 				}
 			}
@@ -201,12 +189,10 @@ func Setup(t, B, lambda, keysize int) (*EvalKey, *VerifyKey) {
 	L := computeL(t)
 	fmt.Printf("L [%v %v %v %v ... %v %v %v] \n", L[0], L[1], L[2], L[3], L[len(L)-3], L[len(L)-2], L[len(L)-1])
 
-	P := product1(L)
-
 	p := big.NewInt(1)
 	q := big.NewInt(1)
 	N := new(big.Int)
-	p, q = generateTwoGoodPrimes(keysize, L, P)
+	p, q = generateTwoGoodPrimes(keysize, L)
 
 	N.Mul(p, q)
 
@@ -232,6 +218,7 @@ func Setup(t, B, lambda, keysize int) (*EvalKey, *VerifyKey) {
 		return
 	}
 
+	P := product1(L, phi)
 	P_inv := big.NewInt(1)
 	t1 := time.Now()
 	P_inv.ModInverse(P, phi)
@@ -252,7 +239,6 @@ type Evaluator struct {
 	B      int
 	Lambda int
 	L      []*big.Int
-	P      *big.Int
 	N      *big.Int
 	Gs     []*big.Int
 }
@@ -271,97 +257,47 @@ func (ev *Evaluator) Init(t, B, lambda int, evaluateKey *EvalKey) {
 	ev.N = evaluateKey.G
 	ev.Gs = evaluateKey.Gs
 	ev.L = computeL(t)
-	ev.P = product1(ev.L)
 	end := time.Now()
 	elapsed := end.Sub(start)
 
 	fmt.Println("evaluator init time", elapsed)
 	tree := gomerkle.NewTree(sha256.New())
 	fmt.Println("tree", tree)
-
 }
 
 func (ev *Evaluator) Eval(x int) (y *big.Int) {
 	t1 := time.Now()
 	L_ind, S_x := generateChallenge(ev.T, ev.B, ev.Lambda, x)
-	L_x := make([]*big.Int, ev.Lambda)
-	for i, v := range L_ind {
-		L_x[i] = ev.L[v]
-	}
 
-	P_x := big.NewInt(1)
-	for _, v := range L_x {
-		P_x.Mul(P_x, v)
-	}
-
-	g_x := big.NewInt(1)
+	y = big.NewInt(1)
 	for _, v := range S_x {
-		g_x.Mul(g_x, ev.Gs[v])
-		g_x.Mod(g_x, ev.N)
+		y.Mul(y, ev.Gs[v])
+		y.Mod(y, ev.N)
 	}
 
-	exp_coeff := big.NewInt(1)
-	exp_coeff.Div(ev.P, P_x)
-
-	fmt.Println("g_x", g_x)
+	fmt.Println("g_x", y)
 	t2 := time.Now()
 	elapsed1 := t2.Sub(t1)
 
-	y = big.NewInt(1)
-
 	start := time.Now()
-	y.Exp(g_x, exp_coeff, ev.N)
+	for i, v := range ev.L {
+		yes := true
+		for _, l := range L_ind {
+			if i == l {
+				yes = false
+				break
+			}
+		}
+		if !yes {
+			continue
+		}
+		y.Exp(y, v, ev.N)
+	}
 	end := time.Now()
 	elapsed := end.Sub(start)
 
 	fmt.Println("y", y)
 	fmt.Println("evaluate prepare time", elapsed1)
-	fmt.Println("actual evaluate time", elapsed)
-
-	return
-}
-
-func Evaluate(t, B, lambda int, evaluateKey *EvalKey, x int) (y *big.Int) {
-	N := evaluateKey.G
-	gs := evaluateKey.Gs
-	L := computeL(t)
-	fmt.Println("\nEVALUATE")
-
-	L_ind, S_x := generateChallenge(t, B, lambda, x)
-	L_x := make([]*big.Int, lambda)
-	for i, v := range L_ind {
-		L_x[i] = L[v]
-	}
-
-	P_x := big.NewInt(1)
-	for _, v := range L_x {
-		P_x.Mul(P_x, v)
-	}
-
-	g_x := big.NewInt(1)
-	for _, v := range S_x {
-		g_x.Mul(g_x, gs[v])
-		g_x.Mod(g_x, N)
-	}
-
-	P := big.NewInt(1)
-	for _, v := range L {
-		P.Mul(P, v)
-	}
-
-	exp_coeff := big.NewInt(1)
-	exp_coeff.Div(P, P_x)
-
-	fmt.Println("g_x", g_x)
-
-	y = big.NewInt(1)
-
-	start := time.Now()
-	y.Exp(g_x, exp_coeff, N)
-	end := time.Now()
-	elapsed := end.Sub(start)
-
-	fmt.Println("y", y)
 	fmt.Println("actual evaluate time", elapsed)
 	return
 }
@@ -423,43 +359,6 @@ func (vr *Verifier) Verify(x int, y *big.Int) bool {
 	fmt.Println("h", h_x)
 	fmt.Println("h2", h2)
 	fmt.Println("verify prepare time", elapsed1)
-	fmt.Println("actual verify time", elapsed)
-	compare := h_x.Cmp(h2)
-	return compare == 0
-}
-
-func Verify(t, B, lambda int, verifyKey *VerifyKey, y *big.Int, x int) bool {
-	fmt.Println("\nVERIFY")
-	hashfunc := verifyKey.H
-	hs := computehs(hashfunc, B)
-	L := computeL(t)
-
-	N := verifyKey.G
-	L_ind, S_x := generateChallenge(t, B, lambda, x)
-	L_x := make([]*big.Int, lambda)
-	for i, v := range L_ind {
-		L_x[i] = L[v]
-	}
-
-	P_x := big.NewInt(1)
-	for _, v := range L_x {
-		P_x.Mul(P_x, v)
-	}
-
-	h_x := big.NewInt(1)
-	for _, v := range S_x {
-		h_x.Mul(h_x, hs[v])
-		h_x.Mod(h_x, N)
-	}
-	h2 := big.NewInt(1)
-
-	start := time.Now()
-	h2.Exp(y, P_x, N)
-	end := time.Now()
-	elapsed := end.Sub(start)
-
-	fmt.Println("h", h_x)
-	fmt.Println("h2", h2)
 	fmt.Println("actual verify time", elapsed)
 	compare := h_x.Cmp(h2)
 	return compare == 0

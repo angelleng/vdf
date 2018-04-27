@@ -6,13 +6,13 @@ import (
 	"sync"
 )
 
-func product1(array []*big.Int) (prod *big.Int) {
+func product1(array []*big.Int, mod *big.Int) (prod *big.Int) {
 	type pair struct {
 		a *big.Int
 		b *big.Int
 	}
 	singles := make(chan *big.Int, len(array))
-	doubles := make(chan pair, 100)
+	doubles := make(chan pair, len(array)/2)
 
 	go func() {
 		for _, v := range array {
@@ -44,7 +44,9 @@ func product1(array []*big.Int) (prod *big.Int) {
 				}
 				a := ab.a
 				b := ab.b
-				singles <- big.NewInt(0).Mul(a, b)
+				result := new(big.Int).Mul(a, b)
+				result.Mod(result, mod)
+				singles <- result
 			}
 		}()
 	}
