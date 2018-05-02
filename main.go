@@ -83,7 +83,7 @@ func main() {
 	}
 	fmt.Println("elements in L size: ", bitlen)
 
-	for challenge := 0; challenge < 3; challenge++ {
+	for challenge := 0; challenge < 1; challenge++ {
 		fmt.Println(" ")
 		// solution := vdf.Evaluate(t, B, lambda, evaluateKey, challenge)
 		t1 = time.Now()

@@ -16,27 +16,19 @@ import (
 	"github.com/onrik/gomerkle"
 )
 
-type EvalKey struct {
-	G  *big.Int
-	H  func(*big.Int) *big.Int
-	Gs []*big.Int
-}
-
-type VerifyKey struct {
-	G *big.Int
-	H func(*big.Int) *big.Int
-}
-
 // helper functions
 func computeL(t int) (L []*big.Int) {
-	primes := prime.Primes(16485863)
-	if len(primes) < t {
+	var primes []uint64
+	if t <= 1000000 {
+		primes = prime.Primes(16485863)
+	} else if t <= 100000000 {
 		primes = prime.Primes(2038074751)
+	} else if t <= 1000000000 {
+		primes = prime.Primes(22801763513)
+	} else if t <= 10000000000 {
+		primes = prime.Primes(252097800629)
 	}
-	if len(primes) < t {
-		primes = prime.Primes(22563323963)
-	}
-	if len(primes) < t {
+	if len(primes) <= t+1 {
 		fmt.Println("error: not enough primes generated.")
 	}
 	L = make([]*big.Int, t)
@@ -94,7 +86,7 @@ func computegs(hs []*big.Int, P_inv *big.Int, N *big.Int) (gs []*big.Int) {
 	return
 }
 
-func isStrongPrime(prime *big.Int, L []*big.Int) bool {
+func isStrongPrime(prime *big.Int) bool {
 	half := new(big.Int)
 	half.Sub(prime, big.NewInt(1))
 	half.Div(half, big.NewInt(2))
@@ -154,7 +146,7 @@ func generateChallenge(t, B, lambda int, X interface{}) (Ind_L, Ind_S []int) {
 	return
 }
 
-func generateTwoGoodPrimes(keysize int, L []*big.Int) (p, q *big.Int) {
+func generateTwoGoodPrimes(keysize int) (p, q *big.Int) {
 	primechan := make(chan *big.Int)
 	found := false
 	fmt.Println("no of cores: ", runtime.NumCPU())
@@ -163,7 +155,7 @@ func generateTwoGoodPrimes(keysize int, L []*big.Int) (p, q *big.Int) {
 			for !found {
 				// fmt.Println("trying1")
 				candidate, _ := cryptorand.Prime(cryptorand.Reader, keysize)
-				if isStrongPrime(candidate, L) {
+				if isStrongPrime(candidate) {
 					primechan <- candidate
 				}
 			}
@@ -178,6 +170,30 @@ func generateTwoGoodPrimes(keysize int, L []*big.Int) (p, q *big.Int) {
 }
 
 // interface
+type EvalKey struct {
+	G  *big.Int
+	H  func(*big.Int) *big.Int
+	Gs []*big.Int
+}
+
+type VerifyKey struct {
+	G *big.Int
+	H func(*big.Int) *big.Int
+}
+
+func Hashfunc(input *big.Int, N *big.Int) (hashval *big.Int) {
+	h := sha256.New()
+	var shasum []byte
+	for len(shasum)*8 < N.BitLen() {
+		h.Write(input.Bytes())
+		shasum = h.Sum(shasum)
+	}
+	hashval = big.NewInt(0)
+	hashval.SetBytes(shasum)
+	hashval.Mod(hashval, N)
+	return
+}
+
 func Setup(t, B, lambda, keysize int) (*EvalKey, *VerifyKey) {
 	if lambda >= t || lambda >= B {
 		err := errors.New("error, lambda should be less than t and B")
@@ -189,12 +205,8 @@ func Setup(t, B, lambda, keysize int) (*EvalKey, *VerifyKey) {
 	L := computeL(t)
 	fmt.Printf("L [%v %v %v %v ... %v %v %v] \n", L[0], L[1], L[2], L[3], L[len(L)-3], L[len(L)-2], L[len(L)-1])
 
-	p := big.NewInt(1)
-	q := big.NewInt(1)
-	N := new(big.Int)
-	p, q = generateTwoGoodPrimes(keysize, L)
-
-	N.Mul(p, q)
+	p, q := generateTwoGoodPrimes(keysize)
+	N := new(big.Int).Mul(p, q)
 
 	fmt.Println("p and q", p, q)
 	fmt.Println("N ", N)
@@ -206,16 +218,7 @@ func Setup(t, B, lambda, keysize int) (*EvalKey, *VerifyKey) {
 	fmt.Println("phi", phi)
 
 	hashfunc := func(input *big.Int) (hashval *big.Int) {
-		h := sha256.New()
-		var shasum []byte
-		for len(shasum)*8 < N.BitLen() {
-			h.Write(input.Bytes())
-			shasum = h.Sum(shasum)
-		}
-		hashval = big.NewInt(0)
-		hashval.SetBytes(shasum)
-		hashval.Mod(hashval, N)
-		return
+		return Hashfunc(input, N)
 	}
 
 	P := product1(L, phi)
@@ -265,7 +268,7 @@ func (ev *Evaluator) Init(t, B, lambda int, evaluateKey *EvalKey) {
 	fmt.Println("tree", tree)
 }
 
-func (ev *Evaluator) Eval(x int) (y *big.Int) {
+func (ev *Evaluator) Eval(x interface{}) (y *big.Int) {
 	t1 := time.Now()
 	L_ind, S_x := generateChallenge(ev.T, ev.B, ev.Lambda, x)
 
@@ -326,7 +329,7 @@ func (vr *Verifier) Init(t, B, lambda int, verifyKey *VerifyKey) {
 	fmt.Println("verifier init time", elapsed)
 }
 
-func (vr *Verifier) Verify(x int, y *big.Int) bool {
+func (vr *Verifier) Verify(x interface{}, y *big.Int) bool {
 	t1 := time.Now()
 
 	L_ind, S_x := generateChallenge(vr.T, vr.B, vr.Lambda, x)
