@@ -48,6 +48,6 @@ func main() {
 
 	file, _ = os.Create(*solutionPath)
 	encoder := gob.NewEncoder(file)
-	encoder.Encode(solution)
+	encoder.Encode(&solution)
 	file.Close()
 }

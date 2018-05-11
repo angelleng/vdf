@@ -35,29 +35,26 @@ func main() {
 		fmt.Println(err)
 	}
 	file.Close()
-	fmt.Println("verify key", verifyKey)
 
 	verifier := new(vdf.Verifier)
 	file, _ = os.Open(*veriStoragePath)
 	decoder = gob.NewDecoder(file)
 	decoder.Decode(verifier)
 	file.Close()
-	fmt.Println("verifier", verifier)
 
 	verifier.Hash = func(input *big.Int) (hashval *big.Int) {
 		return vdf.Hashfunc(input, verifier.N)
 	}
 
 	challenge, err := ioutil.ReadFile(*challengePath)
-	fmt.Println("challenge", challenge)
 
-	var solution *big.Int
+	solution := new(vdf.Solution)
 	file, _ = os.Open(*solutionPath)
 	decoder = gob.NewDecoder(file)
-	decoder.Decode(&solution)
+	decoder.Decode(solution)
 	file.Close()
-	fmt.Println("solution", solution)
+	// fmt.Println(solution)
 
-	success := verifier.Verify(challenge, solution)
+	success := verifier.Verify(challenge, *solution)
 	fmt.Println("result: ", success)
 }

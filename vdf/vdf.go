@@ -28,7 +28,7 @@ func computeL(t int) (L []*big.Int) {
 	} else if t <= 10000000000 {
 		primes = prime.Primes(252097800629)
 	}
-	if len(primes) <= t+1 {
+	if len(primes) < t+1 {
 		fmt.Println("error: not enough primes generated.")
 	}
 	L = make([]*big.Int, t)
@@ -244,12 +244,13 @@ type Evaluator struct {
 	L      []*big.Int
 	N      *big.Int
 	Gs     []*big.Int
+	Ltree  gomerkle.Tree
 }
 
-type Proof struct {
-	y           *big.Int       // solution
-	L_x         []*big.Int     // primes
-	MerkleProof gomerkle.Proof // proof of merkle tree
+type Solution struct {
+	Y           *big.Int         // solution
+	L_x         []*big.Int       // primes
+	MerkleProof []gomerkle.Proof // proof of merkle tree
 }
 
 func (ev *Evaluator) Init(t, B, lambda int, evaluateKey *EvalKey) {
@@ -264,18 +265,32 @@ func (ev *Evaluator) Init(t, B, lambda int, evaluateKey *EvalKey) {
 	elapsed := end.Sub(start)
 
 	fmt.Println("evaluator init time", elapsed)
-	tree := gomerkle.NewTree(sha256.New())
-	fmt.Println("tree", tree)
+
+	ev.Ltree = gomerkle.NewTree(sha256.New())
+	for _, v := range ev.L {
+		ev.Ltree.AddData(v.Bytes())
+	}
+	err := ev.Ltree.Generate()
+	if err != nil {
+		panic(err)
+	}
+
+	fmt.Println("tree", ev.Ltree.Height(), ev.Ltree.Root())
 }
 
-func (ev *Evaluator) Eval(x interface{}) (y *big.Int) {
+func (ev *Evaluator) Eval(x interface{}) (sol Solution) {
 	t1 := time.Now()
 	L_ind, S_x := generateChallenge(ev.T, ev.B, ev.Lambda, x)
 
-	y = big.NewInt(1)
+	y := big.NewInt(1)
 	for _, v := range S_x {
 		y.Mul(y, ev.Gs[v])
 		y.Mod(y, ev.N)
+	}
+
+	L_x := make([]*big.Int, ev.Lambda)
+	for i, v := range L_ind {
+		L_x[i] = ev.L[v]
 	}
 
 	fmt.Println("g_x", y)
@@ -299,9 +314,19 @@ func (ev *Evaluator) Eval(x interface{}) (y *big.Int) {
 	end := time.Now()
 	elapsed := end.Sub(start)
 
+	fmt.Println("compute merkle proof for L_x")
+	proofs := make([]gomerkle.Proof, ev.Lambda)
+	for i, v := range L_ind {
+		proof := ev.Ltree.GetProof(v)
+		proofs[i] = proof
+	}
+
 	fmt.Println("y", y)
 	fmt.Println("evaluate prepare time", elapsed1)
 	fmt.Println("actual evaluate time", elapsed)
+	sol.Y = y
+	sol.L_x = L_x
+	sol.MerkleProof = proofs
 	return
 }
 
@@ -312,6 +337,7 @@ type Verifier struct {
 	N      *big.Int
 	L      []*big.Int
 	Hash   func(*big.Int) *big.Int
+	Lroot  []byte
 }
 
 func (vr *Verifier) Init(t, B, lambda int, verifyKey *VerifyKey) {
@@ -326,13 +352,43 @@ func (vr *Verifier) Init(t, B, lambda int, verifyKey *VerifyKey) {
 	end := time.Now()
 	elapsed := end.Sub(start)
 
+	Ltree := gomerkle.NewTree(sha256.New())
+	for _, v := range vr.L {
+		Ltree.AddData(v.Bytes())
+	}
+	err := Ltree.Generate()
+	if err != nil {
+		panic(err)
+	}
+
+	fmt.Println("tree", Ltree.Height(), Ltree.Root())
+
+	vr.Lroot = Ltree.Root()
+	// vr.Lroot = gomerkle.NewTree(sha256.New())
+	// vr.Lroot.AddHash(Ltree.Root())
+	// vr.Lroot.Generate()
+
 	fmt.Println("verifier init time", elapsed)
 }
 
-func (vr *Verifier) Verify(x interface{}, y *big.Int) bool {
+func (vr *Verifier) Verify(x interface{}, sol Solution) bool {
 	t1 := time.Now()
 
 	L_ind, S_x := generateChallenge(vr.T, vr.B, vr.Lambda, x)
+
+	// use merkle proofs to verify L_x
+	tmpTree := gomerkle.NewTree(sha256.New())
+	tmpTree.AddHash(vr.Lroot)
+	tmpTree.Generate()
+	fmt.Println("Lroot", tmpTree.Height(), tmpTree.Root())
+	for i, _ := range L_ind {
+		hashv := sha256.Sum256(sol.L_x[i].Bytes())
+		yes := tmpTree.VerifyProof(sol.MerkleProof[i], vr.Lroot, hashv[:])
+		if !yes {
+			return false
+		}
+	}
+
 	L_x := make([]*big.Int, vr.Lambda)
 	for i, v := range L_ind {
 		L_x[i] = vr.L[v]
@@ -351,6 +407,7 @@ func (vr *Verifier) Verify(x interface{}, y *big.Int) bool {
 	}
 	h2 := big.NewInt(1)
 
+	y := sol.Y
 	t2 := time.Now()
 	elapsed1 := t2.Sub(t1)
 
