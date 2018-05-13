@@ -8,8 +8,11 @@ import (
 	"errors"
 	"fmt"
 	"math/big"
+	"os"
 	"prime"
 	"runtime"
+	"sort"
+	"strconv"
 	"sync"
 	"time"
 
@@ -38,26 +41,18 @@ func computeL(t int) (L []*big.Int) {
 	return
 }
 
-func computehs(hashfunc func(*big.Int) *big.Int, B int) (hs []*big.Int) {
-	hs = make([]*big.Int, B)
-	for i := 0; i < B; i++ {
-		hs[i] = hashfunc(big.NewInt(int64(i)))
-	}
-	return
-}
-
-func computegs(hs []*big.Int, P_inv *big.Int, N *big.Int) (gs []*big.Int) {
+func computegs(hash func(*big.Int) *big.Int, B int, P_inv *big.Int, N *big.Int) (gs []*big.Int) {
 	fmt.Println("start compute gs")
 	start := time.Now()
-	gs = make([]*big.Int, len(hs))
+	gs = make([]*big.Int, B)
 
 	var wg sync.WaitGroup
-	wg.Add(len(hs))
+	wg.Add(B)
 
 	input := make(chan int, 10)
 
 	go func() {
-		for i := 0; i < len(hs); i++ {
+		for i := 0; i < B; i++ {
 			input <- i
 		}
 		close(input)
@@ -68,7 +63,7 @@ func computegs(hs []*big.Int, P_inv *big.Int, N *big.Int) (gs []*big.Int) {
 			for {
 				i, ok := <-input
 				if ok {
-					v := hs[i]
+					v := hash(big.NewInt(int64(i)))
 					gs[i] = big.NewInt(0)
 					gs[i].Exp(v, P_inv, N)
 					wg.Done()
@@ -84,6 +79,64 @@ func computegs(hs []*big.Int, P_inv *big.Int, N *big.Int) (gs []*big.Int) {
 	elapsed := t.Sub(start)
 	fmt.Println("compute gs time", elapsed)
 	return
+}
+
+func computeAndStoreGs(hash func(input *big.Int) *big.Int, B int, P_inv *big.Int, N *big.Int, gspath string) {
+	perFile := 2 ^ 20
+	nFiles := B / perFile
+	lastFile := B % perFile
+	fmt.Println(nFiles)
+	fmt.Println(lastFile)
+
+	for i := 0; i <= nFiles; i++ {
+		fmt.Println(i)
+		filename := gspath + strconv.Itoa(i)
+		var thisFile int
+		if i < nFiles {
+			thisFile = perFile
+		} else if lastFile != 0 {
+			thisFile = lastFile
+		} else {
+			return
+		}
+
+		gs := make([]*big.Int, thisFile)
+
+		var wg sync.WaitGroup
+		wg.Add(thisFile)
+		input := make(chan int, 100)
+
+		go func() {
+			for j := 0; j < thisFile; j++ {
+				ind := perFile*i + j
+				input <- ind
+			}
+			close(input)
+		}()
+
+		for worker := 0; worker < runtime.NumCPU(); worker++ {
+			go func() {
+				for {
+					ind, ok := <-input
+					if ok {
+						v := hash(big.NewInt(int64(ind)))
+						gs[ind%perFile] = big.NewInt(0)
+						gs[ind%perFile].Exp(v, P_inv, N)
+						wg.Done()
+					} else {
+						return
+					}
+				}
+			}()
+		}
+
+		wg.Wait()
+		file, _ := os.Create(filename)
+		encoder := gob.NewEncoder(file)
+		encoder.Encode(gs)
+		file.Close()
+
+	}
 }
 
 func isStrongPrime(prime *big.Int) bool {
@@ -229,8 +282,8 @@ func Setup(t, B, lambda, keysize int) (*EvalKey, *VerifyKey) {
 	elapsed := t2.Sub(t1)
 	fmt.Println("gen 1/P time: ", elapsed)
 
-	hs := computehs(hashfunc, B)
-	gs := computegs(hs, P_inv, N)
+	gs := computegs(hashfunc, B, P_inv, N)
+	computeAndStoreGs(hashfunc, B, P_inv, N, "gs")
 
 	evaluateKey := EvalKey{N, hashfunc, gs}
 	verifyKey := VerifyKey{N, hashfunc}
@@ -278,15 +331,45 @@ func (ev *Evaluator) Init(t, B, lambda int, evaluateKey *EvalKey) {
 	fmt.Println("tree", ev.Ltree.Height(), ev.Ltree.Root())
 }
 
+func readFileAndComputeGx(S_x []int, gspath string, B int, N *big.Int) *big.Int {
+	sort.Ints(S_x)
+	perFile := 2 ^ 20
+	nFiles := B / perFile
+
+	gx := make([]*big.Int, len(S_x))
+	for i := 0; i <= nFiles; i++ {
+		var gs []*big.Int
+		filename := gspath + strconv.Itoa(i)
+		file, _ := os.Open(filename)
+		decoder := gob.NewDecoder(file)
+		decoder.Decode(&gs)
+		file.Close()
+		for j, v := range S_x {
+			if v >= i*perFile && v < (i+1)*perFile {
+				offset := v % perFile
+				gx[j] = gs[offset]
+			}
+		}
+	}
+
+	y := big.NewInt(1)
+	for _, v := range gx {
+		y.Mul(y, v)
+		y.Mod(y, N)
+	}
+	return y
+}
+
 func (ev *Evaluator) Eval(x interface{}) (sol Solution) {
 	t1 := time.Now()
 	L_ind, S_x := generateChallenge(ev.T, ev.B, ev.Lambda, x)
 
-	y := big.NewInt(1)
-	for _, v := range S_x {
-		y.Mul(y, ev.Gs[v])
-		y.Mod(y, ev.N)
-	}
+	y := readFileAndComputeGx(S_x, "gs", ev.B, ev.N)
+	// y := big.NewInt(1)
+	// for _, v := range S_x {
+	// 	y.Mul(y, ev.Gs[v])
+	// 	y.Mod(y, ev.N)
+	// }
 
 	L_x := make([]*big.Int, ev.Lambda)
 	for i, v := range L_ind {
@@ -364,16 +447,11 @@ func (vr *Verifier) Init(t, B, lambda int, verifyKey *VerifyKey) {
 	fmt.Println("tree", Ltree.Height(), Ltree.Root())
 
 	vr.Lroot = Ltree.Root()
-	// vr.Lroot = gomerkle.NewTree(sha256.New())
-	// vr.Lroot.AddHash(Ltree.Root())
-	// vr.Lroot.Generate()
-
 	fmt.Println("verifier init time", elapsed)
 }
 
 func (vr *Verifier) Verify(x interface{}, sol Solution) bool {
 	t1 := time.Now()
-
 	L_ind, S_x := generateChallenge(vr.T, vr.B, vr.Lambda, x)
 
 	// use merkle proofs to verify L_x
