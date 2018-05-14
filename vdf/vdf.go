@@ -21,6 +21,10 @@ import (
 	"github.com/onrik/gomerkle"
 )
 
+const (
+	perFile = 1 << 20
+)
+
 // helper functions
 func computeL(t int) (L []*big.Int) {
 	var primes []uint64
@@ -83,7 +87,7 @@ func computegs(hash func(*big.Int) *big.Int, B int, P_inv *big.Int, N *big.Int) 
 }
 
 func computeAndStoreGs(hash func(input *big.Int) *big.Int, B int, P_inv *big.Int, N *big.Int, gspath string) {
-	perFile := 1 << 20
+	// perFile := 1 << 20
 	nFiles := B / perFile
 	lastFile := B % perFile
 	fmt.Println(nFiles)
@@ -122,9 +126,6 @@ func computeAndStoreGs(hash func(input *big.Int) *big.Int, B int, P_inv *big.Int
 					if ok {
 						v := hash(big.NewInt(int64(ind)))
 						gi := big.NewInt(0).Exp(v, P_inv, N)
-						fmt.Println(gi)
-						fmt.Println(gi.Bytes())
-
 						gs_bytes[ind%perFile] = bigToFixedLengthBytes(gi, bytesPerBig)
 						wg.Done()
 					} else {
@@ -138,7 +139,6 @@ func computeAndStoreGs(hash func(input *big.Int) *big.Int, B int, P_inv *big.Int
 		for _, v := range gs_bytes {
 			file.Write(v)
 		}
-		fmt.Println(gs_bytes)
 		file.Close()
 	}
 }
@@ -168,32 +168,26 @@ func bigToFixedLengthBytes(in *big.Int, length int) []byte {
 
 func readFileAndComputeGx(S_x []int, gspath string, B int, N *big.Int) *big.Int {
 	sort.Ints(S_x)
-	perFile := 1 << 20
+	// perFile := 1 << 20
 	nFiles := B / perFile
 	bytesPerBig := int(math.Ceil(float64(N.BitLen()) / 8))
 
 	gx := make([]*big.Int, len(S_x))
 	for i := 0; i <= nFiles; i++ {
-		// var gs []*big.Int
 		filename := gspath + strconv.Itoa(i)
 		file, _ := os.Open(filename)
 		for j, v := range S_x {
 			if v >= i*perFile && v < (i+1)*perFile {
 				offset := v % perFile
-				fmt.Println("offset", offset)
 				buf := make([]byte, bytesPerBig)
-				pos, err := file.Seek(int64(offset*bytesPerBig), 0)
-				// pos, err := file.Seek(int64(j*20), 0)
-				fmt.Println(pos)
+				_, err := file.Seek(int64(offset*bytesPerBig), 0)
 				if err != nil {
 					panic(err)
 				}
-				bytesRead, err := file.Read(buf)
-				fmt.Println(bytesRead)
+				_, err = file.Read(buf)
 				if err != nil {
 					panic(err)
 				}
-				fmt.Println(buf)
 				gx[j] = big.NewInt(0).SetBytes(buf)
 			}
 		}
@@ -274,7 +268,6 @@ func generateTwoGoodPrimes(keysize int) (p, q *big.Int) {
 	for i := 0; i < runtime.NumCPU(); i++ {
 		go func() {
 			for !found {
-				// fmt.Println("trying1")
 				candidate, _ := cryptorand.Prime(cryptorand.Reader, keysize)
 				if isStrongPrime(candidate) {
 					primechan <- candidate
@@ -292,9 +285,8 @@ func generateTwoGoodPrimes(keysize int) (p, q *big.Int) {
 
 // interface
 type EvalKey struct {
-	G  *big.Int
-	H  func(*big.Int) *big.Int
-	Gs []*big.Int
+	G *big.Int
+	H func(*big.Int) *big.Int
 }
 
 type VerifyKey struct {
@@ -350,10 +342,11 @@ func Setup(t, B, lambda, keysize int) (*EvalKey, *VerifyKey) {
 	elapsed := t2.Sub(t1)
 	fmt.Println("gen 1/P time: ", elapsed)
 
-	gs := computegs(hashfunc, B, P_inv, N)
+	t3 := time.Now()
 	computeAndStoreGs(hashfunc, B, P_inv, N, "gs")
+	fmt.Println("compute gs time", time.Now().Sub(t3))
 
-	evaluateKey := EvalKey{N, hashfunc, gs}
+	evaluateKey := EvalKey{N, hashfunc}
 	verifyKey := VerifyKey{N, hashfunc}
 	return &evaluateKey, &verifyKey
 }
@@ -364,7 +357,6 @@ type Evaluator struct {
 	Lambda int
 	L      []*big.Int
 	N      *big.Int
-	Gs     []*big.Int
 	Ltree  gomerkle.Tree
 }
 
@@ -380,7 +372,6 @@ func (ev *Evaluator) Init(t, B, lambda int, evaluateKey *EvalKey) {
 	ev.B = B
 	ev.Lambda = lambda
 	ev.N = evaluateKey.G
-	ev.Gs = evaluateKey.Gs
 	ev.L = computeL(t)
 	end := time.Now()
 	elapsed := end.Sub(start)
@@ -403,12 +394,9 @@ func (ev *Evaluator) Eval(x interface{}) (sol Solution) {
 	t1 := time.Now()
 	L_ind, S_x := generateChallenge(ev.T, ev.B, ev.Lambda, x)
 
+	t3 := time.Now()
 	y := readFileAndComputeGx(S_x, "gs", ev.B, ev.N)
-	// y := big.NewInt(1)
-	// for _, v := range S_x {
-	// 	y.Mul(y, ev.Gs[v])
-	// 	y.Mod(y, ev.N)
-	// }
+	fmt.Println("compute gx time", time.Now().Sub(t3))
 
 	L_x := make([]*big.Int, ev.Lambda)
 	for i, v := range L_ind {

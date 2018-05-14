@@ -70,10 +70,6 @@ func main() {
 	fmt.Printf("eval key size: %v (%v B)\n", HumanSize(w.Len()), w.Len())
 
 	w.Reset()
-	e.Encode(evaluator.Gs)
-	fmt.Printf("Gs size: %v (%v B)\n", HumanSize(w.Len()), w.Len())
-
-	w.Reset()
 	e.Encode(evaluator.L)
 	fmt.Printf("L size: %v (%v B)\n", HumanSize(w.Len()), w.Len())
 
