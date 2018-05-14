@@ -7,7 +7,9 @@ import (
 	"encoding/gob"
 	"errors"
 	"fmt"
+	"math"
 	"math/big"
+	"math/bits"
 	"os"
 	"prime"
 	"runtime"
@@ -73,7 +75,6 @@ func computegs(hash func(*big.Int) *big.Int, B int, P_inv *big.Int, N *big.Int) 
 			}
 		}()
 	}
-
 	wg.Wait()
 	t := time.Now()
 	elapsed := t.Sub(start)
@@ -82,14 +83,14 @@ func computegs(hash func(*big.Int) *big.Int, B int, P_inv *big.Int, N *big.Int) 
 }
 
 func computeAndStoreGs(hash func(input *big.Int) *big.Int, B int, P_inv *big.Int, N *big.Int, gspath string) {
-	perFile := 2 ^ 20
+	perFile := 1 << 20
 	nFiles := B / perFile
 	lastFile := B % perFile
 	fmt.Println(nFiles)
 	fmt.Println(lastFile)
+	bytesPerBig := int(math.Ceil(float64(N.BitLen()) / 8))
 
 	for i := 0; i <= nFiles; i++ {
-		fmt.Println(i)
 		filename := gspath + strconv.Itoa(i)
 		var thisFile int
 		if i < nFiles {
@@ -100,7 +101,7 @@ func computeAndStoreGs(hash func(input *big.Int) *big.Int, B int, P_inv *big.Int
 			return
 		}
 
-		gs := make([]*big.Int, thisFile)
+		gs_bytes := make([][]byte, thisFile)
 
 		var wg sync.WaitGroup
 		wg.Add(thisFile)
@@ -120,8 +121,11 @@ func computeAndStoreGs(hash func(input *big.Int) *big.Int, B int, P_inv *big.Int
 					ind, ok := <-input
 					if ok {
 						v := hash(big.NewInt(int64(ind)))
-						gs[ind%perFile] = big.NewInt(0)
-						gs[ind%perFile].Exp(v, P_inv, N)
+						gi := big.NewInt(0).Exp(v, P_inv, N)
+						fmt.Println(gi)
+						fmt.Println(gi.Bytes())
+
+						gs_bytes[ind%perFile] = bigToFixedLengthBytes(gi, bytesPerBig)
 						wg.Done()
 					} else {
 						return
@@ -129,16 +133,80 @@ func computeAndStoreGs(hash func(input *big.Int) *big.Int, B int, P_inv *big.Int
 				}
 			}()
 		}
-
 		wg.Wait()
 		file, _ := os.Create(filename)
-		encoder := gob.NewEncoder(file)
-		encoder.Encode(gs)
+		for _, v := range gs_bytes {
+			file.Write(v)
+		}
+		fmt.Println(gs_bytes)
 		file.Close()
-
 	}
 }
 
+func bigToFixedLengthBytes(in *big.Int, length int) []byte {
+	if length*8 < in.BitLen() {
+		panic("specified length is shorter than input")
+	}
+	_S := bits.UintSize / 8
+	var buf []byte
+	realSize := len(in.Bits()) * _S
+	if length >= realSize {
+		buf = make([]byte, length)
+	} else {
+		buf = make([]byte, realSize)
+	}
+	i := len(buf)
+	for _, d := range in.Bits() {
+		for j := 0; j < _S; j++ {
+			i--
+			buf[i] = byte(d)
+			d >>= 8
+		}
+	}
+	return buf[len(buf)-length:]
+}
+
+func readFileAndComputeGx(S_x []int, gspath string, B int, N *big.Int) *big.Int {
+	sort.Ints(S_x)
+	perFile := 1 << 20
+	nFiles := B / perFile
+	bytesPerBig := int(math.Ceil(float64(N.BitLen()) / 8))
+
+	gx := make([]*big.Int, len(S_x))
+	for i := 0; i <= nFiles; i++ {
+		// var gs []*big.Int
+		filename := gspath + strconv.Itoa(i)
+		file, _ := os.Open(filename)
+		for j, v := range S_x {
+			if v >= i*perFile && v < (i+1)*perFile {
+				offset := v % perFile
+				fmt.Println("offset", offset)
+				buf := make([]byte, bytesPerBig)
+				pos, err := file.Seek(int64(offset*bytesPerBig), 0)
+				// pos, err := file.Seek(int64(j*20), 0)
+				fmt.Println(pos)
+				if err != nil {
+					panic(err)
+				}
+				bytesRead, err := file.Read(buf)
+				fmt.Println(bytesRead)
+				if err != nil {
+					panic(err)
+				}
+				fmt.Println(buf)
+				gx[j] = big.NewInt(0).SetBytes(buf)
+			}
+		}
+		file.Close()
+	}
+
+	y := big.NewInt(1)
+	for _, v := range gx {
+		y.Mul(y, v)
+		y.Mod(y, N)
+	}
+	return y
+}
 func isStrongPrime(prime *big.Int) bool {
 	half := new(big.Int)
 	half.Sub(prime, big.NewInt(1))
@@ -329,35 +397,6 @@ func (ev *Evaluator) Init(t, B, lambda int, evaluateKey *EvalKey) {
 	}
 
 	fmt.Println("tree", ev.Ltree.Height(), ev.Ltree.Root())
-}
-
-func readFileAndComputeGx(S_x []int, gspath string, B int, N *big.Int) *big.Int {
-	sort.Ints(S_x)
-	perFile := 2 ^ 20
-	nFiles := B / perFile
-
-	gx := make([]*big.Int, len(S_x))
-	for i := 0; i <= nFiles; i++ {
-		var gs []*big.Int
-		filename := gspath + strconv.Itoa(i)
-		file, _ := os.Open(filename)
-		decoder := gob.NewDecoder(file)
-		decoder.Decode(&gs)
-		file.Close()
-		for j, v := range S_x {
-			if v >= i*perFile && v < (i+1)*perFile {
-				offset := v % perFile
-				gx[j] = gs[offset]
-			}
-		}
-	}
-
-	y := big.NewInt(1)
-	for _, v := range gx {
-		y.Mul(y, v)
-		y.Mod(y, N)
-	}
-	return y
 }
 
 func (ev *Evaluator) Eval(x interface{}) (sol Solution) {

@@ -2,6 +2,7 @@ package vdf
 
 import (
 	"container/heap"
+	cryptorand "crypto/rand"
 	"fmt"
 	"math/big"
 	"testing"
@@ -140,4 +141,13 @@ func TestPriorityQueue(t *testing.T) {
 		fmt.Printf("%d ", heap.Pop(pq))
 		fmt.Printf("%v ", *pq)
 	}
+}
+
+func TestBigToBytes(t *testing.T) {
+	mybig := big.NewInt(1000000)
+	mybig, _ = cryptorand.Prime(cryptorand.Reader, 513)
+	fmt.Println(len(mybig.Bits()))
+	toBytes := bigToFixedLengthBytes(mybig, 65)
+	fmt.Println(len(toBytes), toBytes)
+	fmt.Println(len(mybig.Bytes()), mybig.Bytes())
 }
