@@ -358,6 +358,10 @@ type Evaluator struct {
 	N      *big.Int
 	L      []*big.Int
 	// Ltree  gomerkle.Tree
+	Pow2  int64 // next closest power of 2 of size
+	Log2  int64 // log2 of pow2
+	Empty map[int64]bool
+	space *os.File // file that stores all hashes
 }
 
 type Solution struct {
@@ -396,7 +400,7 @@ func (ev *Evaluator) Eval(x interface{}) (sol Solution) {
 
 	t3 := time.Now()
 	y := readFileAndComputeGx(S_x, "gs", ev.B, ev.N)
-	fmt.Println("compute gx time", time.Now().Sub(t3))
+	fmt.Println("read and compute gx time", time.Now().Sub(t3))
 
 	L_x := make([]*big.Int, ev.Lambda)
 	for i, v := range L_ind {
@@ -423,21 +427,27 @@ func (ev *Evaluator) Eval(x interface{}) (sol Solution) {
 	}
 	end := time.Now()
 	elapsed := end.Sub(start)
+
+	t_tree_s := time.Now()
 	Ltree := gomerkle.NewTree(sha256.New())
 	for _, v := range ev.L {
 		Ltree.AddData(v.Bytes())
 	}
 	err := Ltree.Generate()
+	fmt.Println("generate tree takes:", time.Now().Sub(t_tree_s))
+
 	if err != nil {
 		panic(err)
 	}
 
 	fmt.Println("compute merkle proof for L_x")
+	t_proof_s := time.Now()
 	proofs := make([]gomerkle.Proof, ev.Lambda)
 	for i, v := range L_ind {
 		proof := Ltree.GetProof(v)
 		proofs[i] = proof
 	}
+	fmt.Println("generate merkle proof takes:", time.Now().Sub(t_proof_s))
 
 	fmt.Println("y", y)
 	fmt.Println("evaluate prepare time", elapsed1)

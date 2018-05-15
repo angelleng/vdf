@@ -156,16 +156,20 @@ func TestBigToBytes(t *testing.T) {
 }
 
 func TestMerkle(t *testing.T) {
+	length := 100000
 
-	L := computeL(3)
+	fmt.Println(length)
+	L := computeL(length)
+	start := time.Now()
 	Ltree := gomerkle.NewTree(sha256.New())
 	for _, v := range L {
 		Ltree.AddData(v.Bytes())
 	}
 	err := Ltree.Generate()
+	fmt.Println("generate tree takes:", time.Now().Sub(start))
 	if err != nil {
 		panic(err)
 	}
 
-	fmt.Println(Ltree)
+	// fmt.Println(Ltree)
 }
