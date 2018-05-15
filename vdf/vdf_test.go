@@ -1,9 +1,11 @@
 package vdf
 
 import (
+	"bytes"
 	"container/heap"
 	cryptorand "crypto/rand"
 	"crypto/sha256"
+	"encoding/gob"
 	"fmt"
 	"math/big"
 	"testing"
@@ -170,6 +172,40 @@ func TestMerkle(t *testing.T) {
 	if err != nil {
 		panic(err)
 	}
+
+	// fmt.Println(Ltree)
+}
+
+func TestEncoding(t *testing.T) {
+	length := 100
+
+	fmt.Println(length)
+	L := computeL(length)
+
+	w := new(bytes.Buffer)
+	e := gob.NewEncoder(w)
+	e.Encode(L)
+	fmt.Printf("L encoded size: %v (%v B)\n", HumanSize(w.Len()), w.Len())
+
+	// 	for _, v := range L {
+	// 		fmt.Println(v.Bytes())
+	// 	}
+	// 	fmt.Println(w.Bytes())
+
+	start := time.Now()
+	Ltree := gomerkle.NewTree(sha256.New())
+	for _, v := range L {
+		Ltree.AddData(v.Bytes())
+	}
+	err := Ltree.Generate()
+	fmt.Println("generate tree takes:", time.Now().Sub(start))
+	if err != nil {
+		panic(err)
+	}
+
+	// 	w.Reset()
+	// 	e.Encode(Ltree)
+	// 	fmt.Printf("tree encoded size: %v (%v B)\n", HumanSize(w.Len()), w.Len())
 
 	// fmt.Println(Ltree)
 }

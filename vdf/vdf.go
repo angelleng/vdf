@@ -16,13 +16,14 @@ import (
 	"sort"
 	"strconv"
 	"sync"
+	"tictoc"
 	"time"
 
 	"github.com/onrik/gomerkle"
 )
 
 const (
-	perFile = 1 << 20
+	perFile = 1 << 30
 )
 
 // helper functions
@@ -315,10 +316,13 @@ func Setup(t, B, lambda, keysize int) (*EvalKey, *VerifyKey) {
 	fmt.Println("\nSETUP")
 	fmt.Printf("parameters: -t=%v -B=%v -lambda=%v -keysize=%v \n", t, B, lambda, keysize)
 
+	tic := tictoc.NewTic()
 	L := computeL(t)
+	tic.Toc("compute L time:")
 	fmt.Printf("L [%v %v %v %v ... %v %v %v] \n", L[0], L[1], L[2], L[3], L[len(L)-3], L[len(L)-2], L[len(L)-1])
 
 	p, q := generateTwoGoodPrimes(keysize)
+	tic.Toc("find p, q time:")
 	N := new(big.Int).Mul(p, q)
 
 	fmt.Println("p and q", p, q)
@@ -334,17 +338,15 @@ func Setup(t, B, lambda, keysize int) (*EvalKey, *VerifyKey) {
 		return Hashfunc(input, N)
 	}
 
+	tic.Tic()
 	P := product1(L, phi)
+	tic.Toc("compute P time:")
 	P_inv := big.NewInt(1)
-	t1 := time.Now()
 	P_inv.ModInverse(P, phi)
-	t2 := time.Now()
-	elapsed := t2.Sub(t1)
-	fmt.Println("gen 1/P time: ", elapsed)
 
-	t3 := time.Now()
+	tic.Tic()
 	computeAndStoreGs(hashfunc, B, P_inv, N, "gs")
-	fmt.Println("compute gs time", time.Now().Sub(t3))
+	tic.Toc("compute and store gs time")
 
 	evaluateKey := EvalKey{N, hashfunc}
 	verifyKey := VerifyKey{N, hashfunc}
@@ -367,16 +369,15 @@ type Solution struct {
 }
 
 func (ev *Evaluator) Init(t, B, lambda int, evaluateKey *EvalKey) {
-	start := time.Now()
+	tic := tictoc.NewTic()
+
 	ev.T = t
 	ev.B = B
 	ev.Lambda = lambda
 	ev.N = evaluateKey.G
 	ev.L = computeL(t)
-	end := time.Now()
-	elapsed := end.Sub(start)
 
-	fmt.Println("evaluator init time", elapsed)
+	tic.Toc("evaluator init time:")
 
 	// ev.Ltree = gomerkle.NewTree(sha256.New())
 	// for _, v := range ev.L {
@@ -386,17 +387,16 @@ func (ev *Evaluator) Init(t, B, lambda int, evaluateKey *EvalKey) {
 	// if err != nil {
 	// 	panic(err)
 	// }
-
 	// fmt.Println("tree", ev.Ltree.Height(), ev.Ltree.Root())
 }
 
 func (ev *Evaluator) Eval(x interface{}) (sol Solution) {
-	t1 := time.Now()
+	tic := tictoc.NewTic()
 	L_ind, S_x := generateChallenge(ev.T, ev.B, ev.Lambda, x)
+	tic.Toc("generate challenge time:")
 
-	t3 := time.Now()
 	y := readFileAndComputeGx(S_x, "gs", ev.B, ev.N)
-	fmt.Println("read and compute gx time", time.Now().Sub(t3))
+	tic.Toc("read and compute gx time:")
 
 	L_x := make([]*big.Int, ev.Lambda)
 	for i, v := range L_ind {
@@ -404,10 +404,8 @@ func (ev *Evaluator) Eval(x interface{}) (sol Solution) {
 	}
 
 	fmt.Println("g_x", y)
-	t2 := time.Now()
-	elapsed1 := t2.Sub(t1)
 
-	start := time.Now()
+	tic.Tic()
 	for i, v := range ev.L {
 		yes := true
 		for _, l := range L_ind {
@@ -421,33 +419,26 @@ func (ev *Evaluator) Eval(x interface{}) (sol Solution) {
 		}
 		y.Exp(y, v, ev.N)
 	}
-	end := time.Now()
-	elapsed := end.Sub(start)
+	tic.Toc("actual evaluate time:")
 
-	t_tree_s := time.Now()
 	Ltree := gomerkle.NewTree(sha256.New())
 	for _, v := range ev.L {
 		Ltree.AddData(v.Bytes())
 	}
 	err := Ltree.Generate()
-	fmt.Println("generate tree takes:", time.Now().Sub(t_tree_s))
-
 	if err != nil {
 		panic(err)
 	}
+	tic.Toc("generate tree takes:")
 
-	fmt.Println("compute merkle proof for L_x")
-	t_proof_s := time.Now()
 	proofs := make([]gomerkle.Proof, ev.Lambda)
 	for i, v := range L_ind {
 		proof := Ltree.GetProof(v)
 		proofs[i] = proof
 	}
-	fmt.Println("generate merkle proof takes:", time.Now().Sub(t_proof_s))
+	tic.Toc("generate merkle proof takes:")
 
 	fmt.Println("y", y)
-	fmt.Println("evaluate prepare time", elapsed1)
-	fmt.Println("actual evaluate time", elapsed)
 	sol.Y = y
 	sol.L_x = L_x
 	sol.MerkleProof = proofs
@@ -464,16 +455,14 @@ type Verifier struct {
 }
 
 func (vr *Verifier) Init(t, B, lambda int, verifyKey *VerifyKey) {
-	start := time.Now()
 	vr.T = t
 	vr.B = B
 	vr.Lambda = lambda
 	vr.N = verifyKey.G
+	tic := tictoc.NewTic()
 	L := computeL(t)
+	tic.Toc("compute L time:")
 	vr.Hash = verifyKey.H
-
-	end := time.Now()
-	elapsed := end.Sub(start)
 
 	Ltree := gomerkle.NewTree(sha256.New())
 	for _, v := range L {
@@ -484,21 +473,22 @@ func (vr *Verifier) Init(t, B, lambda int, verifyKey *VerifyKey) {
 		panic(err)
 	}
 
-	fmt.Println("tree", Ltree.Height(), Ltree.Root())
+	tic.Toc("compute merkle tree time:")
+	// fmt.Println("tree", Ltree.Height(), Ltree.Root())
 
 	vr.Lroot = Ltree.Root()
-	fmt.Println("verifier init time", elapsed)
 }
 
 func (vr *Verifier) Verify(x interface{}, sol Solution) bool {
-	t1 := time.Now()
+	tic := tictoc.NewTic()
 	L_ind, S_x := generateChallenge(vr.T, vr.B, vr.Lambda, x)
+	tic.Toc("generate challenge time:")
 
 	// use merkle proofs to verify L_x
 	tmpTree := gomerkle.NewTree(sha256.New())
 	tmpTree.AddHash(vr.Lroot)
 	tmpTree.Generate()
-	fmt.Println("Lroot", tmpTree.Height(), tmpTree.Root())
+	// fmt.Println("Lroot", tmpTree.Height(), tmpTree.Root())
 	for i, _ := range L_ind {
 		hashv := sha256.Sum256(sol.L_x[i].Bytes())
 		yes := tmpTree.VerifyProof(sol.MerkleProof[i], vr.Lroot, hashv[:])
@@ -506,6 +496,7 @@ func (vr *Verifier) Verify(x interface{}, sol Solution) bool {
 			return false
 		}
 	}
+	tic.Toc("verify merkle proof time:")
 
 	L_x := sol.L_x
 
@@ -513,6 +504,7 @@ func (vr *Verifier) Verify(x interface{}, sol Solution) bool {
 	for _, v := range L_x {
 		P_x.Mul(P_x, v)
 	}
+	tic.Toc("compute Px time:")
 
 	h_x := big.NewInt(1)
 	for _, v := range S_x {
@@ -521,20 +513,27 @@ func (vr *Verifier) Verify(x interface{}, sol Solution) bool {
 		h_x.Mod(h_x, vr.N)
 	}
 	h2 := big.NewInt(1)
+	tic.Toc("compute hx time:")
 
 	y := sol.Y
-	t2 := time.Now()
-	elapsed1 := t2.Sub(t1)
-
-	start := time.Now()
 	h2.Exp(y, P_x, vr.N)
-	end := time.Now()
-	elapsed := end.Sub(start)
+	tic.Toc("actual verification time:")
 
 	fmt.Println("h", h_x)
 	fmt.Println("h2", h2)
-	fmt.Println("verify prepare time", elapsed1)
-	fmt.Println("actual verify time", elapsed)
 	compare := h_x.Cmp(h2)
 	return compare == 0
+}
+
+func HumanSize(b int) string {
+	const unit = 1024
+	if b < unit {
+		return fmt.Sprintf("%d B", b)
+	}
+	div, exp := unit, 0
+	for n := b / unit; n >= unit; n /= unit {
+		div *= unit
+		exp++
+	}
+	return fmt.Sprintf("%.1f%cB", float32(b)/float32(div), "KMGTPE"[exp])
 }

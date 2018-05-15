@@ -8,22 +8,9 @@ import (
 	"log"
 	"os"
 	"runtime/pprof"
-	"time"
+	"tictoc"
 	"vdf"
 )
-
-func HumanSize(b int) string {
-	const unit = 1024
-	if b < unit {
-		return fmt.Sprintf("%d B", b)
-	}
-	div, exp := unit, 0
-	for n := b / unit; n >= unit; n /= unit {
-		div *= unit
-		exp++
-	}
-	return fmt.Sprintf("%.1f%cB", float32(b)/float32(div), "KMGTPE"[exp])
-}
 
 func main() {
 	var t, B, lambda, keysize int
@@ -44,37 +31,36 @@ func main() {
 		defer pprof.StopCPUProfile()
 	}
 
-	start := time.Now()
+	tic := tictoc.NewTic()
 	evaluateKey, verifyKey := vdf.Setup(t, B, lambda, keysize)
-	t1 := time.Now()
-	elapsed := t1.Sub(start)
-	fmt.Println("setup time", elapsed)
+	tic.Toc("setup time:")
 
 	var evaluator vdf.Evaluator
 	var verifier vdf.Verifier
 	evaluator.Init(t, B, lambda, evaluateKey)
 	verifier.Init(t, B, lambda, verifyKey)
+	fmt.Println("")
 
 	w := new(bytes.Buffer)
 	e := gob.NewEncoder(w)
 	e.Encode(verifier)
-	fmt.Printf("verifier storage size: %v (%v B)\n", HumanSize(w.Len()), w.Len())
+	fmt.Printf("verifier storage size: %v (%v B)\n", vdf.HumanSize(w.Len()), w.Len())
 
 	w.Reset()
 	e.Encode(evaluator)
-	fmt.Printf("evaluator storage size: %v (%v B)\n", HumanSize(w.Len()), w.Len())
+	fmt.Printf("evaluator storage size: %v (%v B)\n", vdf.HumanSize(w.Len()), w.Len())
 
 	w.Reset()
 	e.Encode(evaluateKey)
-	fmt.Printf("eval key size: %v (%v B)\n", HumanSize(w.Len()), w.Len())
+	fmt.Printf("eval key size: %v (%v B)\n", vdf.HumanSize(w.Len()), w.Len())
 
 	w.Reset()
 	e.Encode(evaluator.L)
-	fmt.Printf("L size: %v (%v B)\n", HumanSize(w.Len()), w.Len())
+	fmt.Printf("L size: %v (%v B)\n", vdf.HumanSize(w.Len()), w.Len())
 
 	// w.Reset()
 	// e.Encode(evaluator.Ltree)
-	// fmt.Printf("merkle tree size: %v (%v B)\n", HumanSize(w.Len()), w.Len())
+	// fmt.Printf("merkle tree size: %v (%v B)\n", vdf.HumanSize(w.Len()), w.Len())
 
 	bitlen := 0
 	for _, v := range evaluator.L {
@@ -85,19 +71,24 @@ func main() {
 	for challenge := 0; challenge < 1; challenge++ {
 		fmt.Println(" ")
 		// solution := vdf.Evaluate(t, B, lambda, evaluateKey, challenge)
-		t1 = time.Now()
+		tic.Tic()
 		solution2 := evaluator.Eval(challenge)
-		t2 := time.Now()
-		elapsed = t2.Sub(t1)
-		fmt.Println("evaluate time", elapsed)
+		tic.Toc("evaluate time:")
 		fmt.Println("")
 
+		w.Reset()
+		e.Encode(solution2.L_x)
+		fmt.Printf("solution.L_x size: %v (%v B)\n", vdf.HumanSize(w.Len()), w.Len())
+		w.Reset()
+		e.Encode(solution2.Y)
+		fmt.Printf("solution.Y size: %v (%v B)\n", vdf.HumanSize(w.Len()), w.Len())
+		w.Reset()
+		e.Encode(solution2.MerkleProof)
+		fmt.Printf("solution.MerkleProof size: %v (%v B)\n", vdf.HumanSize(w.Len()), w.Len())
 		// success := vdf.Verify(t, B, lambda, verifyKey, solution, challenge)
+		tic.Tic()
 		success2 := verifier.Verify(challenge, solution2)
-		t3 := time.Now()
-		elapsed = t3.Sub(t2)
-		fmt.Println("verify time", elapsed)
-		// fmt.Println("result: ", success)
+		tic.Toc("verify time:")
 		fmt.Println("result: ", success2)
 		fmt.Println("finish")
 	}
