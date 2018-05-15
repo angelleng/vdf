@@ -10,8 +10,6 @@ import (
 )
 
 func main() {
-	fmt.Println("vim-go")
-
 	var t, B, lambda, keysize int
 	var evalKeyPath = flag.String("evalkeypath", "eval.key", "path to evaluation key")
 	var veriKeyPath = flag.String("verikeypath", "veri.key", "path to verification key")

@@ -34,7 +34,7 @@ func main() {
 
 	t2 := time.Now()
 	elapsed := t2.Sub(t1)
-	fmt.Println("evaluate time", elapsed)
+	fmt.Println("evaluate init time", elapsed)
 
 	file, _ = os.Create(*evalStoragePath)
 	encoder := gob.NewEncoder(file)

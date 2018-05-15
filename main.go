@@ -26,7 +26,6 @@ func HumanSize(b int) string {
 }
 
 func main() {
-
 	var t, B, lambda, keysize int
 	var cpuprofile = flag.String("cpuprofile", "", "write cpu profile to file")
 	var memprofile = flag.String("memprofile", "", "write memory profile to this file")
@@ -72,6 +71,10 @@ func main() {
 	w.Reset()
 	e.Encode(evaluator.L)
 	fmt.Printf("L size: %v (%v B)\n", HumanSize(w.Len()), w.Len())
+
+	// w.Reset()
+	// e.Encode(evaluator.Ltree)
+	// fmt.Printf("merkle tree size: %v (%v B)\n", HumanSize(w.Len()), w.Len())
 
 	bitlen := 0
 	for _, v := range evaluator.L {

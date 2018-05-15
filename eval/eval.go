@@ -35,6 +35,7 @@ func main() {
 	decoder = gob.NewDecoder(file)
 	decoder.Decode(evaluator)
 	file.Close()
+	fmt.Println("evaluator", evaluator)
 
 	challenge, _ := ioutil.ReadFile(*challengePath)
 	fmt.Println("challenge", challenge)

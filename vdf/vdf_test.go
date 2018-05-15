@@ -3,10 +3,13 @@ package vdf
 import (
 	"container/heap"
 	cryptorand "crypto/rand"
+	"crypto/sha256"
 	"fmt"
 	"math/big"
 	"testing"
 	"time"
+
+	"github.com/onrik/gomerkle"
 )
 
 func TestGenerateChallenge(t *testing.T) {
@@ -150,4 +153,19 @@ func TestBigToBytes(t *testing.T) {
 	toBytes := bigToFixedLengthBytes(mybig, 65)
 	fmt.Println(len(toBytes), toBytes)
 	fmt.Println(len(mybig.Bytes()), mybig.Bytes())
+}
+
+func TestMerkle(t *testing.T) {
+
+	L := computeL(3)
+	Ltree := gomerkle.NewTree(sha256.New())
+	for _, v := range L {
+		Ltree.AddData(v.Bytes())
+	}
+	err := Ltree.Generate()
+	if err != nil {
+		panic(err)
+	}
+
+	fmt.Println(Ltree)
 }

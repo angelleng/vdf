@@ -355,9 +355,9 @@ type Evaluator struct {
 	T      int
 	B      int
 	Lambda int
-	L      []*big.Int
 	N      *big.Int
-	Ltree  gomerkle.Tree
+	L      []*big.Int
+	// Ltree  gomerkle.Tree
 }
 
 type Solution struct {
@@ -378,16 +378,16 @@ func (ev *Evaluator) Init(t, B, lambda int, evaluateKey *EvalKey) {
 
 	fmt.Println("evaluator init time", elapsed)
 
-	ev.Ltree = gomerkle.NewTree(sha256.New())
-	for _, v := range ev.L {
-		ev.Ltree.AddData(v.Bytes())
-	}
-	err := ev.Ltree.Generate()
-	if err != nil {
-		panic(err)
-	}
+	// ev.Ltree = gomerkle.NewTree(sha256.New())
+	// for _, v := range ev.L {
+	// 	ev.Ltree.AddData(v.Bytes())
+	// }
+	// err := ev.Ltree.Generate()
+	// if err != nil {
+	// 	panic(err)
+	// }
 
-	fmt.Println("tree", ev.Ltree.Height(), ev.Ltree.Root())
+	// fmt.Println("tree", ev.Ltree.Height(), ev.Ltree.Root())
 }
 
 func (ev *Evaluator) Eval(x interface{}) (sol Solution) {
@@ -423,11 +423,19 @@ func (ev *Evaluator) Eval(x interface{}) (sol Solution) {
 	}
 	end := time.Now()
 	elapsed := end.Sub(start)
+	Ltree := gomerkle.NewTree(sha256.New())
+	for _, v := range ev.L {
+		Ltree.AddData(v.Bytes())
+	}
+	err := Ltree.Generate()
+	if err != nil {
+		panic(err)
+	}
 
 	fmt.Println("compute merkle proof for L_x")
 	proofs := make([]gomerkle.Proof, ev.Lambda)
 	for i, v := range L_ind {
-		proof := ev.Ltree.GetProof(v)
+		proof := Ltree.GetProof(v)
 		proofs[i] = proof
 	}
 
@@ -445,7 +453,6 @@ type Verifier struct {
 	B      int
 	Lambda int
 	N      *big.Int
-	L      []*big.Int
 	Hash   func(*big.Int) *big.Int
 	Lroot  []byte
 }
@@ -456,14 +463,14 @@ func (vr *Verifier) Init(t, B, lambda int, verifyKey *VerifyKey) {
 	vr.B = B
 	vr.Lambda = lambda
 	vr.N = verifyKey.G
-	vr.L = computeL(t)
+	L := computeL(t)
 	vr.Hash = verifyKey.H
 
 	end := time.Now()
 	elapsed := end.Sub(start)
 
 	Ltree := gomerkle.NewTree(sha256.New())
-	for _, v := range vr.L {
+	for _, v := range L {
 		Ltree.AddData(v.Bytes())
 	}
 	err := Ltree.Generate()
@@ -494,10 +501,7 @@ func (vr *Verifier) Verify(x interface{}, sol Solution) bool {
 		}
 	}
 
-	L_x := make([]*big.Int, vr.Lambda)
-	for i, v := range L_ind {
-		L_x[i] = vr.L[v]
-	}
+	L_x := sol.L_x
 
 	P_x := big.NewInt(1)
 	for _, v := range L_x {
