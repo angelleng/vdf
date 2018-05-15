@@ -90,6 +90,7 @@ func main() {
 		t2 := time.Now()
 		elapsed = t2.Sub(t1)
 		fmt.Println("evaluate time", elapsed)
+		fmt.Println("")
 
 		// success := vdf.Verify(t, B, lambda, verifyKey, solution, challenge)
 		success2 := verifier.Verify(challenge, solution2)

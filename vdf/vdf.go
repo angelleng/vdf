@@ -358,10 +358,6 @@ type Evaluator struct {
 	N      *big.Int
 	L      []*big.Int
 	// Ltree  gomerkle.Tree
-	Pow2  int64 // next closest power of 2 of size
-	Log2  int64 // log2 of pow2
-	Empty map[int64]bool
-	space *os.File // file that stores all hashes
 }
 
 type Solution struct {
