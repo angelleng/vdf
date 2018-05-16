@@ -24,6 +24,7 @@ import (
 
 const (
 	perFile = 1 << 30
+	perTree = 1 << 20
 )
 
 // helper functions
@@ -91,8 +92,11 @@ func computeAndStoreGs(hash func(input *big.Int) *big.Int, B int, P_inv *big.Int
 	// perFile := 1 << 20
 	nFiles := B / perFile
 	lastFile := B % perFile
-	fmt.Println("number of files for gs", nFiles+1)
-	// fmt.Println(lastFile)
+	if lastFile != 0 {
+		fmt.Println("number of files for gs", nFiles+1)
+	} else {
+		fmt.Println("number of files for gs", nFiles)
+	}
 	bytesPerBig := int(math.Ceil(float64(N.BitLen()) / 8))
 
 	for i := 0; i <= nFiles; i++ {
@@ -401,34 +405,39 @@ func (ev *Evaluator) Eval(x interface{}) (sol Solution) {
 	// fmt.Println("g_x", y)
 
 	L := computeL(ev.T)
+	tic.Toc("compute L time:")
 	w := new(bytes.Buffer)
 	e := gob.NewEncoder(w)
 	e.Encode(L)
 	fmt.Printf("L size: %v (%v B)\n", HumanSize(w.Len()), w.Len())
+	fmt.Println("merkle tree size:", HumanSize(32*ev.T*2))
 
 	bitlen := 0
 	for _, v := range L {
 		bitlen += v.BitLen()
 	}
 	fmt.Println("elements in L size:", bitlen)
-	fmt.Println("merkle tree size:", HumanSize(32*ev.T*2))
 
-	tic.Toc("compute L time:")
-
-	Ltree := gomerkle.NewTree(sha256.New())
-	for _, v := range L {
-		Ltree.AddData(v.Bytes())
-	}
-	err := Ltree.Generate()
-	if err != nil {
-		panic(err)
-	}
-	tic.Toc("generate tree takes:")
+	tic.Tic()
+	nTrees := ev.T / perTree
+	lastTree := ev.T % perTree
 
 	proofs := make([]gomerkle.Proof, ev.Lambda)
-	for i, v := range L_ind {
-		proof := Ltree.GetProof(v)
-		proofs[i] = proof
+	for i := 0; (i < nTrees) || (i == nTrees && lastTree != 0); i++ {
+		Treei := gomerkle.NewTree(sha256.New())
+		for j := i * perTree; j < (i+1)*perTree && j < len(L); j++ {
+			Treei.AddData(L[j].Bytes())
+		}
+		err := Treei.Generate()
+		if err != nil {
+			panic(err)
+		}
+		for k, v := range L_ind {
+			if v >= i*perTree && v < (i+1)*perTree {
+				proof := Treei.GetProof(v % perTree)
+				proofs[k] = proof
+			}
+		}
 	}
 	tic.Toc("generate merkle proof takes:")
 
@@ -466,7 +475,7 @@ type Verifier struct {
 	Lambda int
 	N      *big.Int
 	Hash   func(*big.Int) *big.Int
-	Lroot  []byte
+	Lroots [][]byte
 }
 
 func (vr *Verifier) Init(t, B, lambda int, verifyKey *VerifyKey) {
@@ -480,19 +489,27 @@ func (vr *Verifier) Init(t, B, lambda int, verifyKey *VerifyKey) {
 	tic.Toc("compute L time:")
 	vr.Hash = verifyKey.H
 
-	Ltree := gomerkle.NewTree(sha256.New())
-	for _, v := range L {
-		Ltree.AddData(v.Bytes())
-	}
-	err := Ltree.Generate()
-	if err != nil {
-		panic(err)
+	nTrees := vr.T / perTree
+	lastTree := vr.T % perTree
+	if lastTree != 0 {
+		fmt.Println("number of trees:", nTrees+1)
+	} else {
+		fmt.Println("number of trees:", nTrees)
 	}
 
+	for i := 0; (i < nTrees) || (i == nTrees && lastTree != 0); i++ {
+		Treei := gomerkle.NewTree(sha256.New())
+		for j := i * perTree; j < (i+1)*perTree && j < len(L); j++ {
+			Treei.AddData(L[j].Bytes())
+		}
+		err := Treei.Generate()
+		if err != nil {
+			panic(err)
+		}
+		vr.Lroots = append(vr.Lroots, Treei.Root())
+	}
 	tic.Toc("compute merkle tree time:")
 	tic2.Toc("verify init time:")
-
-	vr.Lroot = Ltree.Root()
 }
 
 func (vr *Verifier) Verify(x interface{}, sol Solution) bool {
@@ -503,15 +520,18 @@ func (vr *Verifier) Verify(x interface{}, sol Solution) bool {
 
 	// use merkle proofs to verify L_x
 	tmpTree := gomerkle.NewTree(sha256.New())
-	tmpTree.AddHash(vr.Lroot)
+	tmpTree.AddHash(vr.Lroots[0])
 	tmpTree.Generate()
-	for i, _ := range L_ind {
+
+	for i, v := range L_ind {
 		hashv := sha256.Sum256(sol.L_x[i].Bytes())
-		yes := tmpTree.VerifyProof(sol.MerkleProof[i], vr.Lroot, hashv[:])
+		root := vr.Lroots[v/perTree]
+		yes := tmpTree.VerifyProof(sol.MerkleProof[i], root, hashv[:])
 		if !yes {
 			return false
 		}
 	}
+
 	tic.Toc("verify merkle proof time:")
 
 	L_x := sol.L_x

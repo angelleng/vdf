@@ -39,16 +39,16 @@ func main() {
 	var verifier vdf.Verifier
 	evaluator.Init(t, B, lambda, evaluateKey)
 	verifier.Init(t, B, lambda, verifyKey)
-	fmt.Println("")
 
+	fmt.Println("")
 	w := new(bytes.Buffer)
 	e := gob.NewEncoder(w)
 	e.Encode(verifier)
 	fmt.Printf("verifier storage size: %v (%v B)\n", vdf.HumanSize(w.Len()), w.Len())
 
-	w.Reset()
-	e.Encode(evaluator)
-	fmt.Printf("evaluator storage size: %v (%v B)\n", vdf.HumanSize(w.Len()), w.Len())
+	// w.Reset()
+	// e.Encode(evaluator)
+	// fmt.Printf("evaluator storage size: %v (%v B)\n", vdf.HumanSize(w.Len()), w.Len())
 
 	// w.Reset()
 	// e.Encode(evaluateKey)
