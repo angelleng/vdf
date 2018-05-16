@@ -50,30 +50,30 @@ func main() {
 	e.Encode(evaluator)
 	fmt.Printf("evaluator storage size: %v (%v B)\n", vdf.HumanSize(w.Len()), w.Len())
 
-	w.Reset()
-	e.Encode(evaluateKey)
-	fmt.Printf("eval key size: %v (%v B)\n", vdf.HumanSize(w.Len()), w.Len())
-
-	w.Reset()
-	e.Encode(evaluator.L)
-	fmt.Printf("L size: %v (%v B)\n", vdf.HumanSize(w.Len()), w.Len())
-
 	// w.Reset()
-	// e.Encode(evaluator.Ltree)
-	// fmt.Printf("merkle tree size: %v (%v B)\n", vdf.HumanSize(w.Len()), w.Len())
+	// e.Encode(evaluateKey)
+	// fmt.Printf("eval key size: %v (%v B)\n", vdf.HumanSize(w.Len()), w.Len())
 
-	bitlen := 0
-	for _, v := range evaluator.L {
-		bitlen += v.BitLen()
-	}
-	fmt.Println("elements in L size: ", bitlen)
+	// 	w.Reset()
+	// 	e.Encode(evaluator.L)
+	// 	fmt.Printf("L size: %v (%v B)\n", vdf.HumanSize(w.Len()), w.Len())
+	//
+	// 	// w.Reset()
+	// 	// e.Encode(evaluator.Ltree)
+	// 	// fmt.Printf("merkle tree size: %v (%v B)\n", vdf.HumanSize(w.Len()), w.Len())
+	//
+	// 	bitlen := 0
+	// 	for _, v := range evaluator.L {
+	// 		bitlen += v.BitLen()
+	// 	}
+	// 	fmt.Println("elements in L size: ", bitlen)
 
 	for challenge := 0; challenge < 1; challenge++ {
-		fmt.Println(" ")
 		// solution := vdf.Evaluate(t, B, lambda, evaluateKey, challenge)
 		tic.Tic()
 		solution2 := evaluator.Eval(challenge)
 		tic.Toc("evaluate time:")
+
 		fmt.Println("")
 
 		w.Reset()
