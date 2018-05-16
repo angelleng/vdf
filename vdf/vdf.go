@@ -101,6 +101,7 @@ func computeAndStoreGs(hash func(input *big.Int) *big.Int, B int, P_inv *big.Int
 
 	for i := 0; i <= nFiles; i++ {
 		filename := gspath + strconv.Itoa(i)
+		file, _ := os.Create(filename)
 		var thisFile int
 		if i < nFiles {
 			thisFile = perFile
@@ -109,8 +110,6 @@ func computeAndStoreGs(hash func(input *big.Int) *big.Int, B int, P_inv *big.Int
 		} else {
 			return
 		}
-
-		gs_bytes := make([][]byte, thisFile)
 
 		var wg sync.WaitGroup
 		wg.Add(thisFile)
@@ -131,7 +130,8 @@ func computeAndStoreGs(hash func(input *big.Int) *big.Int, B int, P_inv *big.Int
 					if ok {
 						v := hash(big.NewInt(int64(ind)))
 						gi := big.NewInt(0).Exp(v, P_inv, N)
-						gs_bytes[ind%perFile] = bigToFixedLengthBytes(gi, bytesPerBig)
+						data := bigToFixedLengthBytes(gi, bytesPerBig)
+						file.WriteAt(data, int64((ind%perFile)*bytesPerBig))
 						wg.Done()
 					} else {
 						return
@@ -140,10 +140,6 @@ func computeAndStoreGs(hash func(input *big.Int) *big.Int, B int, P_inv *big.Int
 			}()
 		}
 		wg.Wait()
-		file, _ := os.Create(filename)
-		for _, v := range gs_bytes {
-			file.Write(v)
-		}
 		file.Close()
 	}
 }
@@ -382,16 +378,6 @@ func (ev *Evaluator) Init(t, B, lambda int, evaluateKey *EvalKey) {
 	// ev.L = computeL(t)
 
 	tic.Toc("evaluator init time:")
-
-	// ev.Ltree = gomerkle.NewTree(sha256.New())
-	// for _, v := range ev.L {
-	// 	ev.Ltree.AddData(v.Bytes())
-	// }
-	// err := ev.Ltree.Generate()
-	// if err != nil {
-	// 	panic(err)
-	// }
-	// fmt.Println("tree", ev.Ltree.Height(), ev.Ltree.Root())
 }
 
 func (ev *Evaluator) Eval(x interface{}) (sol Solution) {
