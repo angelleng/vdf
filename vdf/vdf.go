@@ -18,13 +18,11 @@ import (
 	"sync"
 	"tictoc"
 	"time"
-
-	"github.com/onrik/gomerkle"
 )
 
 const (
-	perFile = 1 << 30
-	perTree = 1 << 20
+	perFile    = 1 << 30
+	omitHeight = 0
 )
 
 // helper functions
@@ -89,7 +87,6 @@ func computegs(hash func(*big.Int) *big.Int, B int, P_inv *big.Int, N *big.Int) 
 }
 
 func computeAndStoreGs(hash func(input *big.Int) *big.Int, B int, P_inv *big.Int, N *big.Int, gspath string) {
-	// perFile := 1 << 20
 	nFiles := B / perFile
 	lastFile := B % perFile
 	if lastFile != 0 {
@@ -135,6 +132,9 @@ func computeAndStoreGs(hash func(input *big.Int) *big.Int, B int, P_inv *big.Int
 						wg.Done()
 					} else {
 						return
+					}
+					if ind%10000000 == 0 {
+						file.Sync()
 					}
 				}
 			}()
@@ -354,28 +354,49 @@ func Setup(t, B, lambda, keysize int) (*EvalKey, *VerifyKey) {
 }
 
 type Evaluator struct {
-	T      int
-	B      int
-	Lambda int
-	N      *big.Int
+	T        int
+	B        int
+	Lambda   int
+	N        *big.Int
+	lfile    os.File
+	treefile os.File
 	// L      []*big.Int
 	// Ltree  gomerkle.Tree
 }
 
 type Solution struct {
-	Y           *big.Int         // solution
-	L_x         []*big.Int       // primes
-	MerkleProof []gomerkle.Proof // proof of merkle tree
+	Y           *big.Int   // solution
+	L_x         []*big.Int // primes
+	MerkleProof [][][]byte // proof of merkle tree
+}
+
+func log2(x int) int {
+	var r int = 0
+	for ; x > 1; x >>= 1 {
+		r++
+	}
+	return r
 }
 
 func (ev *Evaluator) Init(t, B, lambda int, evaluateKey *EvalKey) {
 	tic := tictoc.NewTic()
-
 	ev.T = t
 	ev.B = B
 	ev.Lambda = lambda
 	ev.N = evaluateKey.G
-	// ev.L = computeL(t)
+	L := computeL(t)
+
+	lpath := "L"
+	treepath := "Ltree"
+	lfile, _ := os.Create(lpath)
+	treefile, _ := os.Create(treepath)
+	defer lfile.Close()
+	defer treefile.Close()
+	for _, v := range L {
+		data := bigToFixedLengthBytes(v, 2*log2(t))
+		lfile.Write(data)
+	}
+	// assume t is power of 2
 
 	tic.Toc("evaluator init time:")
 }
@@ -392,6 +413,7 @@ func (ev *Evaluator) Eval(x interface{}) (sol Solution) {
 
 	L := computeL(ev.T)
 	tic.Toc("compute L time:")
+
 	w := new(bytes.Buffer)
 	e := gob.NewEncoder(w)
 	e.Encode(L)
@@ -405,25 +427,13 @@ func (ev *Evaluator) Eval(x interface{}) (sol Solution) {
 	fmt.Println("elements in L size:", bitlen)
 
 	tic.Tic()
-	nTrees := ev.T / perTree
-	lastTree := ev.T % perTree
+	tree, _ := makeTreeFromL(L, omitHeight)
+	tic.Toc("generate merkle tree takes:")
 
-	proofs := make([]gomerkle.Proof, ev.Lambda)
-	for i := 0; (i < nTrees) || (i == nTrees && lastTree != 0); i++ {
-		Treei := gomerkle.NewTree(sha256.New())
-		for j := i * perTree; j < (i+1)*perTree && j < len(L); j++ {
-			Treei.AddData(L[j].Bytes())
-		}
-		err := Treei.Generate()
-		if err != nil {
-			panic(err)
-		}
-		for k, v := range L_ind {
-			if v >= i*perTree && v < (i+1)*perTree {
-				proof := Treei.GetProof(v % perTree)
-				proofs[k] = proof
-			}
-		}
+	proofs := make([][][]byte, 0)
+	for _, ind := range L_ind {
+		proof := getProof(ind, tree)
+		proofs = append(proofs, proof)
 	}
 	tic.Toc("generate merkle proof takes:")
 
@@ -475,45 +485,28 @@ func (vr *Verifier) Init(t, B, lambda int, verifyKey *VerifyKey) {
 	tic.Toc("compute L time:")
 	vr.Hash = verifyKey.H
 
-	nTrees := vr.T / perTree
-	lastTree := vr.T % perTree
-	if lastTree != 0 {
-		fmt.Println("number of trees:", nTrees+1)
-	} else {
-		fmt.Println("number of trees:", nTrees)
-	}
-
-	for i := 0; (i < nTrees) || (i == nTrees && lastTree != 0); i++ {
-		Treei := gomerkle.NewTree(sha256.New())
-		for j := i * perTree; j < (i+1)*perTree && j < len(L); j++ {
-			Treei.AddData(L[j].Bytes())
-		}
-		err := Treei.Generate()
-		if err != nil {
-			panic(err)
-		}
-		vr.Lroots = append(vr.Lroots, Treei.Root())
-	}
+	_, vr.Lroots = makeTreeFromL(L, omitHeight)
 	tic.Toc("compute merkle tree time:")
 	tic2.Toc("verify init time:")
 }
 
 func (vr *Verifier) Verify(x interface{}, sol Solution) bool {
+	fmt.Println("omniHeight:", omitHeight)
 	fmt.Println("\nVERIFY")
 	tic := tictoc.NewTic()
 	L_ind, S_x := generateChallenge(vr.T, vr.B, vr.Lambda, x)
 	tic.Toc("generate challenge time:")
+	height := fullMerkleHeight(vr.T)
+	fmt.Println(height)
 
-	// use merkle proofs to verify L_x
-	tmpTree := gomerkle.NewTree(sha256.New())
-	tmpTree.AddHash(vr.Lroots[0])
-	tmpTree.Generate()
-
+	perTree := 1 << uint(height-omitHeight)
+	// perTree := (1 + vr.T) / len(vr.Lroots)
+	fmt.Println(perTree)
 	for i, v := range L_ind {
-		hashv := sha256.Sum256(sol.L_x[i].Bytes())
-		root := vr.Lroots[v/perTree]
-		yes := tmpTree.VerifyProof(sol.MerkleProof[i], root, hashv[:])
-		if !yes {
+		rootId := v / perTree
+		// fmt.Println(v, rootId)
+		root := vr.Lroots[rootId]
+		if !verifyProof(sol.L_x[i].Bytes(), root, sol.MerkleProof[i], v) {
 			return false
 		}
 	}

@@ -157,7 +157,7 @@ func TestBigToBytes(t *testing.T) {
 	fmt.Println(len(mybig.Bytes()), mybig.Bytes())
 }
 
-func TestMerkle(t *testing.T) {
+func TestGoMerkle(t *testing.T) {
 	length := 10000000
 
 	fmt.Println(length)
