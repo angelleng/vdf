@@ -491,7 +491,7 @@ func (vr *Verifier) Init(t, B, lambda int, verifyKey *VerifyKey) {
 }
 
 func (vr *Verifier) Verify(x interface{}, sol Solution) bool {
-	fmt.Println("omniHeight:", omitHeight)
+	fmt.Println("omitHeight:", omitHeight)
 	fmt.Println("\nVERIFY")
 	tic := tictoc.NewTic()
 	L_ind, S_x := generateChallenge(vr.T, vr.B, vr.Lambda, x)
@@ -514,7 +514,6 @@ func (vr *Verifier) Verify(x interface{}, sol Solution) bool {
 	tic.Toc("verify merkle proof time:")
 
 	L_x := sol.L_x
-
 	P_x := big.NewInt(1)
 	for _, v := range L_x {
 		P_x.Mul(P_x, v)

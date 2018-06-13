@@ -75,7 +75,7 @@ func merklePath(id int, total int) (path []int) {
 	return
 }
 
-func getProofForAList(ids []int, tree [][][]byte) (proof [][]byte) {
+func getBatchProof(ids []int, tree [][][]byte) (proof [][]byte) {
 	height := len(tree)
 	fmt.Println("tree height", height)
 	for i := 0; i < height; i++ {
@@ -106,7 +106,6 @@ func getProofForAList(ids []int, tree [][][]byte) (proof [][]byte) {
 				}
 			}
 			if add {
-				fmt.Println(i, siblingIndex)
 				proof = append(proof, tree[i][siblingIndex])
 			}
 		}
@@ -144,14 +143,11 @@ func verifyBatchProof(ids []int, datas [][]byte, roots [][]byte, proof [][]byte,
 				front++
 			}
 		}
-		fmt.Println("siblings:", siblings)
-
 		nextLevelValues := make(map[int][]byte)
 		nextLevelInds := make([]int, 0)
 		for _, node := range currentLevelInds {
 			_, ok := nextLevelValues[node/2]
 			if !ok {
-				fmt.Println("children:", node/2*2, node/2*2+1)
 				child1, ok1 := currentLevelValues[node/2*2]
 				child2, ok2 := currentLevelValues[node/2*2+1]
 				if ok1 && ok2 {
@@ -163,16 +159,9 @@ func verifyBatchProof(ids []int, datas [][]byte, roots [][]byte, proof [][]byte,
 				nextLevelInds = append(nextLevelInds, node/2)
 			}
 		}
-		// fmt.Print(currentLevelValues)
-		fmt.Println("currentIndx: ", currentLevelInds)
-		// fmt.Println("currentValues", currentLevelValues)
 		currentLevelValues = nextLevelValues
 		currentLevelInds = nextLevelInds
 	}
-	fmt.Println("roots: ", roots)
-	fmt.Println(currentLevelValues)
-	fmt.Println(currentLevelInds)
-	fmt.Println(front)
 	for _, ind := range currentLevelInds {
 		for i, v := range roots[ind] {
 			if v != currentLevelValues[ind][i] {
