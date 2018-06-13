@@ -64,12 +64,12 @@ func TestMerkleBatchProof(t *testing.T) {
 }
 
 func TestMerkleBatchVerify(t *testing.T) {
-	length := 128
+	length := 129
 	fmt.Println(length)
 	L := computeL(length)
 	tree, roots := makeTreeFromL(L, 0)
 
-	list := []int{56, 10, 3, 90, 20}
+	list := []int{1, 2, 3}
 	for _, v := range list {
 		path := merklePath(v, length)
 		fmt.Println(path)
@@ -77,7 +77,11 @@ func TestMerkleBatchVerify(t *testing.T) {
 	proof := getProofForAList(list, tree)
 	height := len(tree)
 	fmt.Printf("\nVerify:")
-	result := verifyBatchProof(list, tree[0], roots, proof, height)
+	datas := make([][]byte, 0)
+	for _, id := range list {
+		datas = append(datas, tree[0][id])
+	}
+	result := verifyBatchProof(list, datas, roots, proof, height)
 	fmt.Println(result)
 
 }

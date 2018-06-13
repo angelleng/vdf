@@ -76,17 +76,12 @@ func merklePath(id int, total int) (path []int) {
 }
 
 func getProofForAList(ids []int, tree [][][]byte) (proof [][]byte) {
-	paths := make([][]int, 0)
-	n := len(tree[0])
-	for _, id := range ids {
-		paths = append(paths, merklePath(id, n))
-	}
 	height := len(tree)
 	fmt.Println("tree height", height)
 	for i := 0; i < height; i++ {
 		availNodes := make([]int, 0)
-		for j := 0; j < len(paths); j++ {
-			newNode := paths[j][i]
+		for j := 0; j < len(ids); j++ {
+			newNode := ids[j] >> uint(i)
 			add := true
 			for _, node := range availNodes {
 				if node == newNode {
@@ -149,25 +144,35 @@ func verifyBatchProof(ids []int, datas [][]byte, roots [][]byte, proof [][]byte,
 				front++
 			}
 		}
-		fmt.Println(siblings)
+		fmt.Println("siblings:", siblings)
 
 		nextLevelValues := make(map[int][]byte)
 		nextLevelInds := make([]int, 0)
 		for _, node := range currentLevelInds {
 			_, ok := nextLevelValues[node/2]
 			if !ok {
-				nextLevelValues[node/2] = makeParent(currentLevelValues[node/2*2-1], currentLevelValues[node/2*2])
+				fmt.Println("children:", node/2*2, node/2*2+1)
+				child1, ok1 := currentLevelValues[node/2*2]
+				child2, ok2 := currentLevelValues[node/2*2+1]
+				if ok1 && ok2 {
+					nextLevelValues[node/2] = makeParent(child1, child2)
+				} else {
+					fmt.Println(ok1, ok2)
+					panic("read map error")
+				}
 				nextLevelInds = append(nextLevelInds, node/2)
 			}
 		}
-		fmt.Print(currentLevelValues)
-		fmt.Print(currentLevelInds)
+		// fmt.Print(currentLevelValues)
+		fmt.Println("currentIndx: ", currentLevelInds)
+		// fmt.Println("currentValues", currentLevelValues)
 		currentLevelValues = nextLevelValues
 		currentLevelInds = nextLevelInds
 	}
-	fmt.Print(roots)
-	fmt.Print(currentLevelValues)
-	fmt.Print(currentLevelInds)
+	fmt.Println("roots: ", roots)
+	fmt.Println(currentLevelValues)
+	fmt.Println(currentLevelInds)
+	fmt.Println(front)
 	for _, ind := range currentLevelInds {
 		for i, v := range roots[ind] {
 			if v != currentLevelValues[ind][i] {
