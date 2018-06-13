@@ -3,6 +3,7 @@ package vdf
 
 import (
 	"crypto/sha256"
+	"fmt"
 	"math/big"
 )
 
@@ -61,7 +62,120 @@ func fullMerkleHeight(n int) int {
 	return r
 }
 
+// might not need depending on memory of prover
 func computeAndStoreTree(hashes [][]byte, file string) {
+}
+
+func merklePath(id int, total int) (path []int) {
+	path = make([]int, 0)
+	for i := total; i > 1; i >>= 1 {
+		path = append(path, id)
+		id >>= 1
+	}
+	return
+}
+
+func getProofForAList(ids []int, tree [][][]byte) (proof [][]byte) {
+	paths := make([][]int, 0)
+	n := len(tree[0])
+	for _, id := range ids {
+		paths = append(paths, merklePath(id, n))
+	}
+	height := len(tree)
+	fmt.Println("tree height", height)
+	for i := 0; i < height; i++ {
+		availNodes := make([]int, 0)
+		for j := 0; j < len(paths); j++ {
+			newNode := paths[j][i]
+			add := true
+			for _, node := range availNodes {
+				if node == newNode {
+					add = false
+				}
+			}
+			if add {
+				availNodes = append(availNodes, newNode)
+			}
+		}
+		for _, node := range availNodes {
+			var siblingIndex int
+			if node%2 == 0 {
+				siblingIndex = node + 1
+			} else {
+				siblingIndex = node - 1
+			}
+			add := true
+			for _, node2 := range availNodes {
+				if siblingIndex == node2 {
+					add = false
+				}
+			}
+			if add {
+				fmt.Println(i, siblingIndex)
+				proof = append(proof, tree[i][siblingIndex])
+			}
+		}
+	}
+	return
+}
+
+func verifyBatchProof(ids []int, datas [][]byte, roots [][]byte, proof [][]byte, height int) bool {
+	currentLevelValues := make(map[int][]byte)
+	currentLevelInds := make([]int, 0)
+	front := 0
+	for i, id := range ids {
+		currentLevelValues[id] = datas[i]
+		currentLevelInds = append(currentLevelInds, id)
+	}
+
+	for i := 0; i < height; i++ {
+		siblings := make([]int, 0)
+		for _, ind := range currentLevelInds {
+			var siblingIndex int
+			if ind%2 == 0 {
+				siblingIndex = ind + 1
+			} else {
+				siblingIndex = ind - 1
+			}
+			add := true
+			for _, node := range currentLevelInds {
+				if siblingIndex == node {
+					add = false
+				}
+			}
+			if add {
+				siblings = append(siblings, siblingIndex)
+				currentLevelValues[siblingIndex] = proof[front]
+				front++
+			}
+		}
+		fmt.Println(siblings)
+
+		nextLevelValues := make(map[int][]byte)
+		nextLevelInds := make([]int, 0)
+		for _, node := range currentLevelInds {
+			_, ok := nextLevelValues[node/2]
+			if !ok {
+				nextLevelValues[node/2] = makeParent(currentLevelValues[node/2*2-1], currentLevelValues[node/2*2])
+				nextLevelInds = append(nextLevelInds, node/2)
+			}
+		}
+		fmt.Print(currentLevelValues)
+		fmt.Print(currentLevelInds)
+		currentLevelValues = nextLevelValues
+		currentLevelInds = nextLevelInds
+	}
+	fmt.Print(roots)
+	fmt.Print(currentLevelValues)
+	fmt.Print(currentLevelInds)
+	for _, ind := range currentLevelInds {
+		for i, v := range roots[ind] {
+			if v != currentLevelValues[ind][i] {
+				return false
+			}
+		}
+	}
+	return true
 }
 
 func getProof(id int, tree [][][]byte) (proof [][]byte) {

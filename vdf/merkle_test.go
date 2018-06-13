@@ -40,3 +40,44 @@ func TestMerkleProof(t *testing.T) {
 	result := verifyProof(L[id].Bytes(), root[0], proof, id)
 	fmt.Println(result)
 }
+
+func TestMerklePath(t *testing.T) {
+	length := 128
+	fmt.Println(length)
+
+	path := merklePath(56, length)
+	fmt.Println(path)
+}
+
+func TestMerkleBatchProof(t *testing.T) {
+	length := 128
+	fmt.Println(length)
+	L := computeL(length)
+	tree, _ := makeTreeFromL(L, 0)
+
+	list := []int{56, 10, 3, 90, 20}
+	for _, v := range list {
+		path := merklePath(v, length)
+		fmt.Println(path)
+	}
+	getProofForAList(list, tree)
+}
+
+func TestMerkleBatchVerify(t *testing.T) {
+	length := 128
+	fmt.Println(length)
+	L := computeL(length)
+	tree, roots := makeTreeFromL(L, 0)
+
+	list := []int{56, 10, 3, 90, 20}
+	for _, v := range list {
+		path := merklePath(v, length)
+		fmt.Println(path)
+	}
+	proof := getProofForAList(list, tree)
+	height := len(tree)
+	fmt.Printf("\nVerify:")
+	result := verifyBatchProof(list, tree[0], roots, proof, height)
+	fmt.Println(result)
+
+}
