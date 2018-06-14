@@ -1,0 +1,6 @@
+TODO:
+- Merkle tree:
+    -- refactor old proof method
+    -- store tree on disk for new method
+- Hygiene: make omitHeight and filename of gs arguments
+- Implement Bloom filters for verification on L

@@ -3,6 +3,7 @@ package vdf
 import (
 	"crypto/sha256"
 	"fmt"
+	"math/big"
 	"math/rand"
 	"testing"
 	"tictoc"
@@ -10,7 +11,7 @@ import (
 )
 
 func TestMerkleMakeParent(t *testing.T) {
-	length := 5
+	length := 1024 * 1024 * 8
 	fmt.Println(length)
 
 	L := computeL(length)
@@ -19,9 +20,12 @@ func TestMerkleMakeParent(t *testing.T) {
 		hash := sha256.Sum256(v.Bytes())
 		Lhash = append(Lhash, hash[:])
 	}
-	parent := makeParentLevel(Lhash)
-	fmt.Println(Lhash)
-	fmt.Println(parent)
+	tic := tictoc.NewTic()
+	// parent := makeParentLevel(Lhash)
+	makeParentLevel(Lhash)
+	tic.Toc("time")
+	// fmt.Println(Lhash)
+	// fmt.Println(parent)
 }
 
 func TestMerkleProof(t *testing.T) {
@@ -68,9 +72,9 @@ func TestMerkleBatchProof(t *testing.T) {
 
 func TestMerkleBatchVerify(t *testing.T) {
 	tic := tictoc.NewTic()
-	length := 1024 * 1024 * 4 * 8
-	omit := 8
-	num := 80
+	length := 1024 + 1
+	omit := 0
+	num := 1000
 	fmt.Println("length =", length)
 	fmt.Println("omit height:", omit)
 	fmt.Println("num:", num)
@@ -80,6 +84,7 @@ func TestMerkleBatchVerify(t *testing.T) {
 
 	tree, roots := makeTreeFromL(L, omit)
 	tic.Toc("make tree time:")
+	// fmt.Println(tree)
 
 	s1 := rand.NewSource(time.Now().UnixNano())
 	r1 := rand.New(s1)
@@ -98,15 +103,19 @@ func TestMerkleBatchVerify(t *testing.T) {
 		list = append(list, newInd)
 		i++
 	}
-	fmt.Println(list)
+
+	// fmt.Println(list)
+	fmt.Printf("\nProof\n")
 	tic.Tic()
 	proof := getBatchProof(list, tree)
+
 	tic.Toc("get proof time:")
+	// fmt.Println(proof)
 	height := len(tree)
 	fmt.Printf("\nVerify:\n")
-	datas := make([][]byte, 0)
+	datas := make([]*big.Int, 0)
 	for _, id := range list {
-		datas = append(datas, tree[0][id])
+		datas = append(datas, L[id])
 	}
 
 	tic.Tic()
@@ -118,5 +127,4 @@ func TestMerkleBatchVerify(t *testing.T) {
 	if !result {
 		t.Error("should verify true")
 	}
-
 }

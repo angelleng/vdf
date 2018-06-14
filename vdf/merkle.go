@@ -1,4 +1,3 @@
-// code adapted from github.com/kwonalbert/pospace/
 package vdf
 
 import (
@@ -62,8 +61,20 @@ func fullMerkleHeight(n int) int {
 	return r
 }
 
-// might not need depending on memory of prover
-func computeAndStoreTree(hashes [][]byte, file string) {
+// incomplete. might not need depending on memory of prover
+func makeTreeOnDiskFromL(L []*big.Int, omit int, file string) {
+	currentLevel := make([][]byte, 0)
+	for _, v := range L {
+		hash := sha256.Sum256(v.Bytes())
+		currentLevel = append(currentLevel, hash[:])
+	}
+	for len(currentLevel) > 1<<uint(omit) {
+		currentLevel = makeParentLevel(currentLevel)
+	}
+}
+
+func getBatchProofFromDisk(ids []int, treefile string, t int) (proof [][]byte) {
+	return
 }
 
 func merklePath(id int, total int) (path []int) {
@@ -106,19 +117,27 @@ func getBatchProof(ids []int, tree [][][]byte) (proof [][]byte) {
 				}
 			}
 			if add {
-				proof = append(proof, tree[i][siblingIndex])
+				var sibling []byte
+				if siblingIndex == len(tree[i]) {
+					sibling = []byte{}
+				} else {
+					sibling = tree[i][siblingIndex]
+				}
+				proof = append(proof, sibling)
 			}
 		}
 	}
 	return
 }
 
-func verifyBatchProof(ids []int, datas [][]byte, roots [][]byte, proof [][]byte, height int) bool {
+func verifyBatchProof(ids []int, datas []*big.Int, roots [][]byte, proof [][]byte, height int) bool {
 	currentLevelValues := make(map[int][]byte)
 	currentLevelInds := make([]int, 0)
 	front := 0
 	for i, id := range ids {
-		currentLevelValues[id] = datas[i]
+		data := datas[i].Bytes()
+		hash := sha256.Sum256(data)
+		currentLevelValues[id] = hash[:]
 		currentLevelInds = append(currentLevelInds, id)
 	}
 
@@ -162,11 +181,33 @@ func verifyBatchProof(ids []int, datas [][]byte, roots [][]byte, proof [][]byte,
 		currentLevelValues = nextLevelValues
 		currentLevelInds = nextLevelInds
 	}
+
 	for _, ind := range currentLevelInds {
 		for i, v := range roots[ind] {
 			if v != currentLevelValues[ind][i] {
 				return false
 			}
+		}
+	}
+	return true
+}
+
+func getBatchProofOld(ids []int, tree [][][]byte) (proof [][]byte) {
+	proof = make([][]byte, 0)
+	for _, id := range ids {
+		p := getProof(id, tree)
+		proof = append(proof, p...)
+	}
+	return
+}
+
+func verifyBatchProofOld(ids []int, datas []*big.Int, roots [][]byte, proof [][]byte, height int) bool {
+	perTree := 1 << uint(height)
+	for i, id := range ids {
+		rootId := id / perTree
+		root := roots[rootId]
+		if !verifyProof(datas[i].Bytes(), root, proof[i*height:(i+1)*height], id) {
+			return false
 		}
 	}
 	return true

@@ -22,7 +22,7 @@ import (
 
 const (
 	perFile    = 1 << 30
-	omitHeight = 0
+	omitHeight = 5
 )
 
 // helper functions
@@ -367,7 +367,7 @@ type Evaluator struct {
 type Solution struct {
 	Y           *big.Int   // solution
 	L_x         []*big.Int // primes
-	MerkleProof [][][]byte // proof of merkle tree
+	MerkleProof [][]byte   // proof of merkle tree
 }
 
 func log2(x int) int {
@@ -396,7 +396,6 @@ func (ev *Evaluator) Init(t, B, lambda int, evaluateKey *EvalKey) {
 		data := bigToFixedLengthBytes(v, 2*log2(t))
 		lfile.Write(data)
 	}
-	// assume t is power of 2
 
 	tic.Toc("evaluator init time:")
 }
@@ -430,11 +429,9 @@ func (ev *Evaluator) Eval(x interface{}) (sol Solution) {
 	tree, _ := makeTreeFromL(L, omitHeight)
 	tic.Toc("generate merkle tree takes:")
 
-	proofs := make([][][]byte, 0)
-	for _, ind := range L_ind {
-		proof := getProof(ind, tree)
-		proofs = append(proofs, proof)
-	}
+	// proofs := make([][][]byte, 0)
+
+	proofs := getBatchProof(L_ind, tree)
 	tic.Toc("generate merkle proof takes:")
 
 	L_x := make([]*big.Int, ev.Lambda)
@@ -499,18 +496,9 @@ func (vr *Verifier) Verify(x interface{}, sol Solution) bool {
 	height := fullMerkleHeight(vr.T)
 	fmt.Println(height)
 
-	perTree := 1 << uint(height-omitHeight)
-	// perTree := (1 + vr.T) / len(vr.Lroots)
-	fmt.Println(perTree)
-	for i, v := range L_ind {
-		rootId := v / perTree
-		// fmt.Println(v, rootId)
-		root := vr.Lroots[rootId]
-		if !verifyProof(sol.L_x[i].Bytes(), root, sol.MerkleProof[i], v) {
-			return false
-		}
+	if !verifyBatchProof(L_ind, sol.L_x, vr.Lroots, sol.MerkleProof, height-omitHeight) {
+		return false
 	}
-
 	tic.Toc("verify merkle proof time:")
 
 	L_x := sol.L_x
