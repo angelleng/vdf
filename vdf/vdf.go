@@ -7,6 +7,7 @@ import (
 	"encoding/gob"
 	"errors"
 	"fmt"
+	"io/ioutil"
 	"math"
 	"math/big"
 	"math/bits"
@@ -21,11 +22,24 @@ import (
 )
 
 const (
-	perFile    = 1 << 30
-	omitHeight = 5
+	perFile = 1 << 30
 )
 
 // helper functions
+func log2(x int) int {
+	var r int = 0
+	for ; x > 1; x >>= 1 {
+		r++
+	}
+	return r
+}
+
+func check(e error) {
+	if e != nil {
+		panic(e)
+	}
+}
+
 func computeL(t int) (L []*big.Int) {
 	var primes []uint64
 	if t <= 1000000 {
@@ -86,7 +100,7 @@ func computegs(hash func(*big.Int) *big.Int, B int, P_inv *big.Int, N *big.Int) 
 	return
 }
 
-func computeAndStoreGs(hash func(input *big.Int) *big.Int, B int, P_inv *big.Int, N *big.Int, gspath string) {
+func computeAndStoreGs(hash func(input *big.Int) *big.Int, B int, P_inv *big.Int, N *big.Int, gsPath string) {
 	nFiles := B / perFile
 	lastFile := B % perFile
 	if lastFile != 0 {
@@ -97,7 +111,7 @@ func computeAndStoreGs(hash func(input *big.Int) *big.Int, B int, P_inv *big.Int
 	bytesPerBig := int(math.Ceil(float64(N.BitLen()) / 8))
 
 	for i := 0; i <= nFiles; i++ {
-		filename := gspath + strconv.Itoa(i)
+		filename := gsPath + strconv.Itoa(i)
 		file, _ := os.Create(filename)
 		var thisFile int
 		if i < nFiles {
@@ -167,7 +181,7 @@ func bigToFixedLengthBytes(in *big.Int, length int) []byte {
 	return buf[len(buf)-length:]
 }
 
-func readFileAndComputeGx(S_x []int, gspath string, B int, N *big.Int) *big.Int {
+func readFileAndComputeGx(S_x []int, gsPath string, B int, N *big.Int) *big.Int {
 	sort.Ints(S_x)
 	// perFile := 1 << 20
 	nFiles := B / perFile
@@ -175,7 +189,7 @@ func readFileAndComputeGx(S_x []int, gspath string, B int, N *big.Int) *big.Int 
 
 	gx := make([]*big.Int, len(S_x))
 	for i := 0; i <= nFiles; i++ {
-		filename := gspath + strconv.Itoa(i)
+		filename := gsPath + strconv.Itoa(i)
 		file, _ := os.Open(filename)
 		for j, v := range S_x {
 			if v >= i*perFile && v < (i+1)*perFile {
@@ -284,17 +298,6 @@ func generateTwoGoodPrimes(keysize int) (p, q *big.Int) {
 	return
 }
 
-// interface
-type EvalKey struct {
-	G *big.Int
-	H func(*big.Int) *big.Int
-}
-
-type VerifyKey struct {
-	G *big.Int
-	H func(*big.Int) *big.Int
-}
-
 func Hashfunc(input *big.Int, N *big.Int) (hashval *big.Int) {
 	h := sha256.New()
 	var shasum []byte
@@ -308,7 +311,8 @@ func Hashfunc(input *big.Int, N *big.Int) (hashval *big.Int) {
 	return
 }
 
-func Setup(t, B, lambda, keysize int) (*EvalKey, *VerifyKey) {
+// interface
+func Setup(t, B, lambda, keysize int, gsPath, NPath string) {
 	if lambda >= t || lambda >= B {
 		err := errors.New("error, lambda should be less than t and B")
 		fmt.Println(err)
@@ -324,6 +328,10 @@ func Setup(t, B, lambda, keysize int) (*EvalKey, *VerifyKey) {
 	p, q := generateTwoGoodPrimes(keysize)
 	tic.Toc("find p, q time:")
 	N := new(big.Int).Mul(p, q)
+
+	file, _ := os.Create(NPath)
+	file.Write(N.Bytes())
+	file.Close()
 
 	// fmt.Println("p and q", p, q)
 	// fmt.Println("N ", N)
@@ -345,23 +353,12 @@ func Setup(t, B, lambda, keysize int) (*EvalKey, *VerifyKey) {
 	P_inv.ModInverse(P, phi)
 
 	tic.Tic()
-	computeAndStoreGs(hashfunc, B, P_inv, N, "gs")
+	computeAndStoreGs(hashfunc, B, P_inv, N, gsPath)
 	tic.Toc("compute and store gs time")
 
-	evaluateKey := EvalKey{N, hashfunc}
-	verifyKey := VerifyKey{N, hashfunc}
-	return &evaluateKey, &verifyKey
 }
 
 type Evaluator struct {
-	T        int
-	B        int
-	Lambda   int
-	N        *big.Int
-	lfile    os.File
-	treefile os.File
-	// L      []*big.Int
-	// Ltree  gomerkle.Tree
 }
 
 type Solution struct {
@@ -370,20 +367,8 @@ type Solution struct {
 	MerkleProof [][]byte   // proof of merkle tree
 }
 
-func log2(x int) int {
-	var r int = 0
-	for ; x > 1; x >>= 1 {
-		r++
-	}
-	return r
-}
-
-func (ev *Evaluator) Init(t, B, lambda int, evaluateKey *EvalKey) {
+func (ev *Evaluator) Init(t, omitHeight int) {
 	tic := tictoc.NewTic()
-	ev.T = t
-	ev.B = B
-	ev.Lambda = lambda
-	ev.N = evaluateKey.G
 	L := computeL(t)
 
 	lpath := "L"
@@ -396,28 +381,37 @@ func (ev *Evaluator) Init(t, B, lambda int, evaluateKey *EvalKey) {
 		data := bigToFixedLengthBytes(v, 2*log2(t))
 		lfile.Write(data)
 	}
+	tree, _ := makeTreeFromL(L, omitHeight)
+	encoder := gob.NewEncoder(treefile)
+	err := encoder.Encode(tree)
+	check(err)
 
 	tic.Toc("evaluator init time:")
 }
 
-func (ev *Evaluator) Eval(x interface{}) (sol Solution) {
+func (ev *Evaluator) Eval(t, B, lambda, omitHeight int, NPath string, x interface{}, gsPath string) (sol Solution) {
 	fmt.Println("\nEVAL")
 	tic := tictoc.NewTic()
-	L_ind, S_x := generateChallenge(ev.T, ev.B, ev.Lambda, x)
+	L_ind, S_x := generateChallenge(t, B, lambda, x)
 	tic.Toc("generate challenge time:")
 
-	y := readFileAndComputeGx(S_x, "gs", ev.B, ev.N)
+	N := new(big.Int)
+	dat, err := ioutil.ReadFile(NPath)
+	check(err)
+	N.SetBytes(dat)
+
+	y := readFileAndComputeGx(S_x, gsPath, B, N)
 	tic.Toc("read and compute g_x time:")
 	// fmt.Println("g_x", y)
 
-	L := computeL(ev.T)
+	L := computeL(t)
 	tic.Toc("compute L time:")
 
 	w := new(bytes.Buffer)
 	e := gob.NewEncoder(w)
 	e.Encode(L)
 	fmt.Printf("L size: %v (%v B)\n", HumanSize(w.Len()), w.Len())
-	fmt.Println("merkle tree size:", HumanSize(32*ev.T*2))
+	fmt.Println("merkle tree size:", HumanSize(32*t*2))
 
 	bitlen := 0
 	for _, v := range L {
@@ -429,12 +423,10 @@ func (ev *Evaluator) Eval(x interface{}) (sol Solution) {
 	tree, _ := makeTreeFromL(L, omitHeight)
 	tic.Toc("generate merkle tree takes:")
 
-	// proofs := make([][][]byte, 0)
-
 	proofs := getBatchProof(L_ind, tree)
 	tic.Toc("generate merkle proof takes:")
 
-	L_x := make([]*big.Int, ev.Lambda)
+	L_x := make([]*big.Int, lambda)
 	for i, v := range L_ind {
 		L_x[i] = L[v]
 	}
@@ -451,7 +443,7 @@ func (ev *Evaluator) Eval(x interface{}) (sol Solution) {
 		if !yes {
 			continue
 		}
-		y.Exp(y, v, ev.N)
+		y.Exp(y, v, N)
 	}
 	tic.Toc("actual evaluate time:")
 
@@ -463,37 +455,34 @@ func (ev *Evaluator) Eval(x interface{}) (sol Solution) {
 }
 
 type Verifier struct {
-	T      int
-	B      int
-	Lambda int
-	N      *big.Int
-	Hash   func(*big.Int) *big.Int
 	Lroots [][]byte
 }
 
-func (vr *Verifier) Init(t, B, lambda int, verifyKey *VerifyKey) {
-	vr.T = t
-	vr.B = B
-	vr.Lambda = lambda
-	vr.N = verifyKey.G
+func (vr *Verifier) Init(t, omitHeight int) {
 	tic := tictoc.NewTic()
 	tic2 := tictoc.NewTic()
 	L := computeL(t)
 	tic.Toc("compute L time:")
-	vr.Hash = verifyKey.H
 
 	_, vr.Lroots = makeTreeFromL(L, omitHeight)
 	tic.Toc("compute merkle tree time:")
 	tic2.Toc("verify init time:")
 }
 
-func (vr *Verifier) Verify(x interface{}, sol Solution) bool {
+func (vr *Verifier) Verify(t, B, lambda, omitHeight int, NPath string, x interface{}, sol Solution) bool {
+	N := new(big.Int)
+	dat, err := ioutil.ReadFile(NPath)
+	check(err)
+	N.SetBytes(dat)
+	hashfun := func(input *big.Int) (hashval *big.Int) {
+		return Hashfunc(input, N)
+	}
 	fmt.Println("omitHeight:", omitHeight)
 	fmt.Println("\nVERIFY")
 	tic := tictoc.NewTic()
-	L_ind, S_x := generateChallenge(vr.T, vr.B, vr.Lambda, x)
+	L_ind, S_x := generateChallenge(t, B, lambda, x)
 	tic.Toc("generate challenge time:")
-	height := fullMerkleHeight(vr.T)
+	height := fullMerkleHeight(t)
 	fmt.Println(height)
 
 	if !verifyBatchProof(L_ind, sol.L_x, vr.Lroots, sol.MerkleProof, height-omitHeight) {
@@ -510,15 +499,15 @@ func (vr *Verifier) Verify(x interface{}, sol Solution) bool {
 
 	h_x := big.NewInt(1)
 	for _, v := range S_x {
-		h := vr.Hash(big.NewInt(int64(v)))
+		h := hashfun(big.NewInt(int64(v)))
 		h_x.Mul(h_x, h)
-		h_x.Mod(h_x, vr.N)
+		h_x.Mod(h_x, N)
 	}
 	h2 := big.NewInt(1)
 	tic.Toc("compute hx time:")
 
 	y := sol.Y
-	h2.Exp(y, P_x, vr.N)
+	h2.Exp(y, P_x, N)
 	tic.Toc("actual verification time:")
 
 	// fmt.Println("h", h_x)

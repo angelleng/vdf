@@ -13,6 +13,7 @@ func main() {
 	var t, B, lambda, keysize int
 	var evalKeyPath = flag.String("evalkeypath", "eval.key", "path to evaluation key")
 	var veriKeyPath = flag.String("verikeypath", "veri.key", "path to verification key")
+	var gsPath = flag.String("gspath", "gs", "path to gs")
 
 	flag.IntVar(&t, "t", 1000000, "t")
 	flag.IntVar(&B, "B", 1000000, "B")
@@ -22,7 +23,7 @@ func main() {
 	flag.Parse()
 
 	start := time.Now()
-	evaluateKey, verifyKey := vdf.Setup(t, B, lambda, keysize)
+	evaluateKey, verifyKey := vdf.Setup(t, B, lambda, keysize, *gsPath)
 	t1 := time.Now()
 	elapsed := t1.Sub(start)
 	fmt.Println("setup time", elapsed)
@@ -45,6 +46,5 @@ func main() {
 		fmt.Println(err)
 	}
 	file.Close()
-
 	// fmt.Printf("verifier storage size: %v (%v B)\n", HumanSize(w.Len()), w.Len())
 }

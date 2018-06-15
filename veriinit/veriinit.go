@@ -10,7 +10,7 @@ import (
 )
 
 func main() {
-	var t, B, lambda, keysize int
+	var t, B, lambda, keysize, omitHeight int
 	var veriKeyPath = flag.String("verikeypath", "veri.key", "path to verify key")
 	var veriStoragePath = flag.String("veristoragepath", "veri.storage", "path to verifier storage")
 
@@ -18,6 +18,7 @@ func main() {
 	flag.IntVar(&B, "B", 1000000, "B")
 	flag.IntVar(&lambda, "lambda", 1000, "lambda")
 	flag.IntVar(&keysize, "keysize", 512, "keysize")
+	flag.IntVar(&omitHeight, "omit", 0, "omit")
 
 	flag.Parse()
 
@@ -30,7 +31,7 @@ func main() {
 	t1 := time.Now()
 
 	var verifier vdf.Verifier
-	verifier.Init(t, B, lambda, verifyKey)
+	verifier.Init(t, B, lambda, omitHeight, verifyKey)
 	t2 := time.Now()
 	elapsed := t2.Sub(t1)
 	fmt.Println("verify init time", elapsed)

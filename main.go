@@ -13,13 +13,16 @@ import (
 )
 
 func main() {
-	var t, B, lambda, keysize int
+	var t, B, lambda, keysize, omitHeight int
 	var cpuprofile = flag.String("cpuprofile", "", "write cpu profile to file")
 	var memprofile = flag.String("memprofile", "", "write memory profile to this file")
+	var gsPath = flag.String("gspath", "gs", "path to gs")
+	var NPath = flag.String("npath", "N", "path to N")
 	flag.IntVar(&t, "t", 100, "write memory profile to this file")
 	flag.IntVar(&B, "B", 10000, "write memory profile to this file")
 	flag.IntVar(&lambda, "lambda", 100, "write memory profile to this file")
 	flag.IntVar(&keysize, "keysize", 2048, "write memory profile to this file")
+	flag.IntVar(&omitHeight, "omit", 0, "omit")
 
 	flag.Parse()
 	if *cpuprofile != "" {
@@ -32,15 +35,15 @@ func main() {
 	}
 
 	tic := tictoc.NewTic()
-	evaluateKey, verifyKey := vdf.Setup(t, B, lambda, keysize)
+	fmt.Println(*gsPath)
+	vdf.Setup(t, B, lambda, keysize, *gsPath, *NPath)
 	tic.Toc("setup time:")
 
 	var evaluator vdf.Evaluator
 	var verifier vdf.Verifier
-	evaluator.Init(t, B, lambda, evaluateKey)
-	verifier.Init(t, B, lambda, verifyKey)
+	evaluator.Init(t, omitHeight)
+	verifier.Init(t, omitHeight)
 
-	fmt.Println("")
 	w := new(bytes.Buffer)
 	e := gob.NewEncoder(w)
 	// e.Encode(verifier)
@@ -71,7 +74,7 @@ func main() {
 	for challenge := 0; challenge < 1; challenge++ {
 		// solution := vdf.Evaluate(t, B, lambda, evaluateKey, challenge)
 		tic.Tic()
-		solution2 := evaluator.Eval(challenge)
+		solution2 := evaluator.Eval(t, B, lambda, omitHeight, *NPath, challenge, *gsPath)
 		tic.Toc("evaluate time:")
 
 		fmt.Println("")
@@ -90,7 +93,7 @@ func main() {
 		fmt.Printf("verifier storage size: %v (%v B)\n", vdf.HumanSize(w.Len()), w.Len())
 		// success := vdf.Verify(t, B, lambda, verifyKey, solution, challenge)
 		tic.Tic()
-		success2 := verifier.Verify(challenge, solution2)
+		success2 := verifier.Verify(t, B, lambda, omitHeight, *NPath, challenge, solution2)
 		tic.Toc("verify time:")
 		fmt.Println("result: ", success2)
 		fmt.Println("finish")

@@ -11,7 +11,7 @@ import (
 )
 
 func main() {
-	var t, B, lambda, keysize int
+	var t, B, lambda, keysize, omitHeight int
 	var veriKeyPath = flag.String("verikeypath", "veri.key", "path to verify key")
 	var veriStoragePath = flag.String("veristoragepath", "veri.storage", "path to verifier storage")
 	var challengePath = flag.String("challengepath", "challenge.txt", "path to challenge")
@@ -21,6 +21,7 @@ func main() {
 	flag.IntVar(&B, "B", 1000000, "B")
 	flag.IntVar(&lambda, "lambda", 1000, "lambda")
 	flag.IntVar(&keysize, "keysize", 512, "keysize")
+	flag.IntVar(&omitHeight, "omit", 0, "omit")
 
 	flag.Parse()
 
@@ -55,6 +56,6 @@ func main() {
 	file.Close()
 	// fmt.Println(solution)
 
-	success := verifier.Verify(challenge, *solution)
+	success := verifier.Verify(challenge, omitHeight, *solution)
 	fmt.Println("result: ", success)
 }
