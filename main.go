@@ -35,7 +35,6 @@ func main() {
 	}
 
 	tic := tictoc.NewTic()
-	fmt.Println(*gsPath)
 	vdf.Setup(t, B, lambda, keysize, *gsPath, *NPath)
 	tic.Toc("setup time:")
 

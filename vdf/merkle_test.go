@@ -11,10 +11,14 @@ import (
 )
 
 func TestMerkleMakeParent(t *testing.T) {
-	length := 1024 * 1024 * 8
+	length := 9 // 1024 * 1024 * 8
 	fmt.Println(length)
 
-	L := computeL(length)
+	// L2 := computeL(length)
+	L := make([]*big.Int, length)
+	for i := range L {
+		L[i] = big.NewInt(int64(i * log2(i)))
+	}
 	Lhash := make([][]byte, 0)
 	for _, v := range L {
 		hash := sha256.Sum256(v.Bytes())
@@ -22,10 +26,32 @@ func TestMerkleMakeParent(t *testing.T) {
 	}
 	tic := tictoc.NewTic()
 	// parent := makeParentLevel(Lhash)
-	makeParentLevel(Lhash)
+	parent := makeParentLevel(Lhash)
 	tic.Toc("time")
-	// fmt.Println(Lhash)
-	// fmt.Println(parent)
+	fmt.Println(Lhash)
+	fmt.Println(parent)
+}
+
+func TestMerkleMakeParentParralel(t *testing.T) {
+	length := 9 // 1024 * 1024 * 8
+	fmt.Println(length)
+
+	// L := computeL(length)
+	L := make([]*big.Int, length)
+	for i := range L {
+		L[i] = big.NewInt(int64(i * log2(i)))
+	}
+	Lhash := make([][]byte, 0)
+	for _, v := range L {
+		hash := sha256.Sum256(v.Bytes())
+		Lhash = append(Lhash, hash[:])
+	}
+	tic := tictoc.NewTic()
+	// parent := makeParentLevel(Lhash)
+	parent := makeParentLevelParallel(Lhash)
+	tic.Toc("time")
+	fmt.Println(Lhash)
+	fmt.Println(parent)
 }
 
 func TestMerkleProof(t *testing.T) {
@@ -127,4 +153,30 @@ func TestMerkleBatchVerify(t *testing.T) {
 	if !result {
 		t.Error("should verify true")
 	}
+}
+
+func TestMerkleMakeTreeParallel(t *testing.T) {
+	length := 102400000
+	L := make([]*big.Int, length)
+	for i := range L {
+		L[i] = big.NewInt(int64(i * log2(i)))
+	}
+	// fmt.Println(L)
+	tic := tictoc.NewTic()
+	_, root := makeTreeFromLParallel(L, 0)
+	tic.Toc("make tree time:")
+	fmt.Println(root)
+}
+
+func TestMerkleMakeTreeNormal(t *testing.T) {
+	length := 102400000
+	L := make([]*big.Int, length)
+	for i := range L {
+		L[i] = big.NewInt(int64(i * log2(i)))
+	}
+	// fmt.Println(L)
+	tic := tictoc.NewTic()
+	_, root := makeTreeFromL(L, 0)
+	tic.Toc("make tree time:")
+	fmt.Println(root)
 }

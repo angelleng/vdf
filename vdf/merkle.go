@@ -4,6 +4,8 @@ import (
 	"crypto/sha256"
 	"fmt"
 	"math/big"
+	"runtime"
+	"sync"
 )
 
 func makeParent(child1 []byte, child2 []byte) []byte {
@@ -22,21 +24,62 @@ func makeParentLevel(hashes [][]byte) [][]byte {
 	return parentLevel
 }
 
+func makeParentLevelParallel(hashes [][]byte) [][]byte {
+	if len(hashes)%2 == 1 {
+		hashes = append(hashes, []byte{})
+	}
+	parentLevel := make([][]byte, len(hashes)/2)
+
+	workChan := make(chan int, runtime.NumCPU()*20)
+	var wg sync.WaitGroup
+	wg.Add(len(hashes) / 2)
+	go func() {
+		for i := 0; i < len(hashes); i += 2 {
+			// fmt.Println("task", i)
+			workChan <- i
+		}
+		close(workChan)
+	}()
+
+	for worker := 0; worker < runtime.NumCPU(); worker++ {
+		go func() {
+			for i := range workChan {
+				// fmt.Println(i)
+				parentLevel[i/2] = makeParent(hashes[i], hashes[i+1])
+				wg.Done()
+			}
+		}()
+	}
+	wg.Wait()
+	return parentLevel
+}
+
+func makeTreeParallel(hashes [][]byte, omit int) (tree [][][]byte, roots [][]byte) {
+	currentLevel := hashes
+	tree = make([][][]byte, 0)
+	for len(currentLevel) > 1<<uint(omit) {
+		tree = append(tree, currentLevel)
+		currentLevel = makeParentLevelParallel(currentLevel)
+	}
+	roots = currentLevel
+	return
+}
+
+func makeTreeFromLParallel(L []*big.Int, omit int) (tree [][][]byte, roots [][]byte) {
+	Lhashes := make([][]byte, 0)
+	for _, v := range L {
+		hash := sha256.Sum256(v.Bytes())
+		Lhashes = append(Lhashes, hash[:])
+	}
+	return makeTreeParallel(Lhashes, omit)
+}
+
 func makeRoot(hashes [][]byte) []byte {
 	currentLevel := hashes
 	for len(currentLevel) != 1 {
 		currentLevel = makeParentLevel(currentLevel)
 	}
 	return currentLevel[0]
-}
-
-func makeTreeFromL(L []*big.Int, omit int) (tree [][][]byte, roots [][]byte) {
-	Lhashes := make([][]byte, 0)
-	for _, v := range L {
-		hash := sha256.Sum256(v.Bytes())
-		Lhashes = append(Lhashes, hash[:])
-	}
-	return makeTree(Lhashes, omit)
 }
 
 func makeTree(hashes [][]byte, omit int) (tree [][][]byte, roots [][]byte) {
@@ -48,6 +91,15 @@ func makeTree(hashes [][]byte, omit int) (tree [][][]byte, roots [][]byte) {
 	}
 	roots = currentLevel
 	return
+}
+
+func makeTreeFromL(L []*big.Int, omit int) (tree [][][]byte, roots [][]byte) {
+	Lhashes := make([][]byte, 0)
+	for _, v := range L {
+		hash := sha256.Sum256(v.Bytes())
+		Lhashes = append(Lhashes, hash[:])
+	}
+	return makeTree(Lhashes, omit)
 }
 
 func fullMerkleHeight(n int) int {
