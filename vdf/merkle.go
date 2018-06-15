@@ -30,7 +30,7 @@ func makeParentLevelParallel(hashes [][]byte) [][]byte {
 	}
 	parentLevel := make([][]byte, len(hashes)/2)
 
-	workChan := make(chan int, runtime.NumCPU()*20)
+	workChan := make(chan int, runtime.NumCPU()*50)
 	var wg sync.WaitGroup
 	wg.Add(len(hashes) / 2)
 	go func() {
@@ -66,11 +66,28 @@ func makeTreeParallel(hashes [][]byte, omit int) (tree [][][]byte, roots [][]byt
 }
 
 func makeTreeFromLParallel(L []*big.Int, omit int) (tree [][][]byte, roots [][]byte) {
-	Lhashes := make([][]byte, 0)
-	for _, v := range L {
-		hash := sha256.Sum256(v.Bytes())
-		Lhashes = append(Lhashes, hash[:])
+	Lhashes := make([][]byte, len(L))
+	workChan := make(chan int, runtime.NumCPU()*50)
+	var wg sync.WaitGroup
+	wg.Add(len(L))
+	go func() {
+		for i := 0; i < len(L); i++ {
+			// fmt.Println("task", i)
+			workChan <- i
+		}
+		close(workChan)
+	}()
+
+	for worker := 0; worker < runtime.NumCPU(); worker++ {
+		go func() {
+			for i := range workChan {
+				hash := sha256.Sum256(L[i].Bytes())
+				Lhashes[i] = hash[:]
+				wg.Done()
+			}
+		}()
 	}
+	wg.Wait()
 	return makeTreeParallel(Lhashes, omit)
 }
 

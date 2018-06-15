@@ -156,7 +156,7 @@ func TestMerkleBatchVerify(t *testing.T) {
 }
 
 func TestMerkleMakeTreeParallel(t *testing.T) {
-	length := 102400000
+	length := 10240000
 	L := make([]*big.Int, length)
 	for i := range L {
 		L[i] = big.NewInt(int64(i * log2(i)))
@@ -169,7 +169,7 @@ func TestMerkleMakeTreeParallel(t *testing.T) {
 }
 
 func TestMerkleMakeTreeNormal(t *testing.T) {
-	length := 102400000
+	length := 10240000
 	L := make([]*big.Int, length)
 	for i := range L {
 		L[i] = big.NewInt(int64(i * log2(i)))
