@@ -1,6 +1,6 @@
 * TODO Merkle tree:
 - [X] refactor old proof method
-- [ ] store tree on disk for new method, don't use gob
+- [X] store tree on disk for new method, don't use gob
 * TODO Hygiene:
 - [X] make omitHeight and filename of gs arguments
 - [X] refactor code, make functions in vdf.go interact with disk directly, get rid of evalKey etc.

@@ -10,7 +10,6 @@ import (
 	"io/ioutil"
 	"math"
 	"math/big"
-	"math/bits"
 	"os"
 	"prime"
 	"runtime"
@@ -26,20 +25,6 @@ const (
 )
 
 // helper functions
-func log2(x int) int {
-	var r int = 0
-	for ; x > 1; x >>= 1 {
-		r++
-	}
-	return r
-}
-
-func check(e error) {
-	if e != nil {
-		panic(e)
-	}
-}
-
 func computeL(t int) (L []*big.Int) {
 	var primes []uint64
 	if t <= 1000000 {
@@ -158,29 +143,6 @@ func computeAndStoreGs(hash func(input *big.Int) *big.Int, B int, P_inv *big.Int
 	}
 }
 
-func bigToFixedLengthBytes(in *big.Int, length int) []byte {
-	if length*8 < in.BitLen() {
-		panic("specified length is shorter than input")
-	}
-	_S := bits.UintSize / 8
-	var buf []byte
-	realSize := len(in.Bits()) * _S
-	if length >= realSize {
-		buf = make([]byte, length)
-	} else {
-		buf = make([]byte, realSize)
-	}
-	i := len(buf)
-	for _, d := range in.Bits() {
-		for j := 0; j < _S; j++ {
-			i--
-			buf[i] = byte(d)
-			d >>= 8
-		}
-	}
-	return buf[len(buf)-length:]
-}
-
 func readFileAndComputeGx(S_x []int, gsPath string, B int, N *big.Int) *big.Int {
 	sort.Ints(S_x)
 	// perFile := 1 << 20
@@ -215,12 +177,6 @@ func readFileAndComputeGx(S_x []int, gsPath string, B int, N *big.Int) *big.Int 
 		y.Mod(y, N)
 	}
 	return y
-}
-func isStrongPrime(prime *big.Int) bool {
-	half := new(big.Int)
-	half.Sub(prime, big.NewInt(1))
-	half.Div(half, big.NewInt(2))
-	return half.ProbablyPrime(20)
 }
 
 func generateChallenge(t, B, lambda int, X interface{}) (Ind_L, Ind_S []int) {
@@ -532,17 +488,4 @@ func Verify(t, B, lambda, omitHeight int, NPath string, rootsPath string, x inte
 	// fmt.Println("h2", h2)
 	compare := h_x.Cmp(h2)
 	return compare == 0
-}
-
-func HumanSize(b int) string {
-	const unit = 1024
-	if b < unit {
-		return fmt.Sprintf("%d B", b)
-	}
-	div, exp := unit, 0
-	for n := b / unit; n >= unit; n /= unit {
-		div *= unit
-		exp++
-	}
-	return fmt.Sprintf("%.1f%cB", float32(b)/float32(div), "KMGTPE"[exp])
 }
