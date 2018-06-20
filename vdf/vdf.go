@@ -358,16 +358,13 @@ func Setup(t, B, lambda, keysize int, gsPath, NPath string) {
 
 }
 
-type Evaluator struct {
-}
-
 type Solution struct {
 	Y           *big.Int   // solution
 	L_x         []*big.Int // primes
 	MerkleProof [][]byte   // proof of merkle tree
 }
 
-func (ev *Evaluator) Init(t, omitHeight int) {
+func EvalInit(t, omitHeight int) {
 	tic := tictoc.NewTic()
 	L := computeL(t)
 
@@ -381,7 +378,7 @@ func (ev *Evaluator) Init(t, omitHeight int) {
 		data := bigToFixedLengthBytes(v, 2*log2(t))
 		lfile.Write(data)
 	}
-	tree, _ := makeTreeFromL(L, omitHeight)
+	tree, _ := MakeTreeFromData(L, omitHeight)
 	encoder := gob.NewEncoder(treefile)
 	err := encoder.Encode(tree)
 	check(err)
@@ -389,7 +386,7 @@ func (ev *Evaluator) Init(t, omitHeight int) {
 	tic.Toc("evaluator init time:")
 }
 
-func (ev *Evaluator) Eval(t, B, lambda, omitHeight int, NPath string, x interface{}, gsPath string) (sol Solution) {
+func Evaluate(t, B, lambda, omitHeight int, NPath string, x interface{}, gsPath, solPath string) (sol Solution) {
 	fmt.Println("\nEVAL")
 	tic := tictoc.NewTic()
 	L_ind, S_x := generateChallenge(t, B, lambda, x)
@@ -420,10 +417,10 @@ func (ev *Evaluator) Eval(t, B, lambda, omitHeight int, NPath string, x interfac
 	fmt.Println("elements in L size:", bitlen)
 
 	tic.Tic()
-	tree, _ := makeTreeFromL(L, omitHeight)
+	tree, _ := MakeTreeFromData(L, omitHeight)
 	tic.Toc("generate merkle tree takes:")
 
-	proofs := getBatchProof(L_ind, tree)
+	proofs := GetBatchProof(L_ind, tree)
 	tic.Toc("generate merkle proof takes:")
 
 	L_x := make([]*big.Int, lambda)
@@ -451,25 +448,31 @@ func (ev *Evaluator) Eval(t, B, lambda, omitHeight int, NPath string, x interfac
 	sol.Y = y
 	sol.L_x = L_x
 	sol.MerkleProof = proofs
+
+	file, _ := os.Create(solPath)
+	encoder := gob.NewEncoder(file)
+	err = encoder.Encode(sol)
+	check(err)
 	return
 }
 
-type Verifier struct {
-	Lroots [][]byte
-}
-
-func (vr *Verifier) Init(t, omitHeight int) {
+func VeriInit(t, omitHeight int, rootsPath string) {
 	tic := tictoc.NewTic()
 	tic2 := tictoc.NewTic()
 	L := computeL(t)
 	tic.Toc("compute L time:")
 
-	_, vr.Lroots = makeTreeFromL(L, omitHeight)
+	_, Lroots := MakeTreeFromData(L, omitHeight)
 	tic.Toc("compute merkle tree time:")
 	tic2.Toc("verify init time:")
+
+	file, _ := os.Create(rootsPath)
+	encoder := gob.NewEncoder(file)
+	err := encoder.Encode(Lroots)
+	check(err)
 }
 
-func (vr *Verifier) Verify(t, B, lambda, omitHeight int, NPath string, x interface{}, sol Solution) bool {
+func Verify(t, B, lambda, omitHeight int, NPath string, rootsPath string, x interface{}, solPath string) bool {
 	N := new(big.Int)
 	dat, err := ioutil.ReadFile(NPath)
 	check(err)
@@ -477,6 +480,21 @@ func (vr *Verifier) Verify(t, B, lambda, omitHeight int, NPath string, x interfa
 	hashfun := func(input *big.Int) (hashval *big.Int) {
 		return Hashfunc(input, N)
 	}
+
+	roots := new([][]byte)
+	file, err := os.Open(rootsPath)
+	check(err)
+	decoder := gob.NewDecoder(file)
+	decoder.Decode(roots)
+	file.Close()
+
+	sol := new(Solution)
+	file, err = os.Open(solPath)
+	check(err)
+	decoder = gob.NewDecoder(file)
+	decoder.Decode(sol)
+	file.Close()
+
 	fmt.Println("omitHeight:", omitHeight)
 	fmt.Println("\nVERIFY")
 	tic := tictoc.NewTic()
@@ -485,7 +503,7 @@ func (vr *Verifier) Verify(t, B, lambda, omitHeight int, NPath string, x interfa
 	height := fullMerkleHeight(t)
 	fmt.Println(height)
 
-	if !verifyBatchProof(L_ind, sol.L_x, vr.Lroots, sol.MerkleProof, height-omitHeight) {
+	if !VerifyBatchProof(L_ind, sol.L_x, *roots, sol.MerkleProof, height-omitHeight) {
 		return false
 	}
 	tic.Toc("verify merkle proof time:")

@@ -4,8 +4,13 @@ import (
 	"crypto/sha256"
 	"fmt"
 	"math/big"
+	"os"
 	"runtime"
 	"sync"
+)
+
+const (
+	hashSizeInBytes = 32
 )
 
 func makeParent(child1 []byte, child2 []byte) []byte {
@@ -54,7 +59,7 @@ func makeParentLevelParallel(hashes [][]byte) [][]byte {
 	return parentLevel
 }
 
-func makeTreeParallel(hashes [][]byte, omit int) (tree [][][]byte, roots [][]byte) {
+func MakeTreeParallel(hashes [][]byte, omit int) (tree [][][]byte, roots [][]byte) {
 	currentLevel := hashes
 	tree = make([][][]byte, 0)
 	for len(currentLevel) > 1<<uint(omit) {
@@ -65,7 +70,7 @@ func makeTreeParallel(hashes [][]byte, omit int) (tree [][][]byte, roots [][]byt
 	return
 }
 
-func makeTreeFromLParallel(L []*big.Int, omit int) (tree [][][]byte, roots [][]byte) {
+func MakeTreeFromDataParallel(L []*big.Int, omit int) (tree [][][]byte, roots [][]byte) {
 	Lhashes := make([][]byte, len(L))
 	workChan := make(chan int, runtime.NumCPU()*50)
 	var wg sync.WaitGroup
@@ -88,7 +93,23 @@ func makeTreeFromLParallel(L []*big.Int, omit int) (tree [][][]byte, roots [][]b
 		}()
 	}
 	wg.Wait()
-	return makeTreeParallel(Lhashes, omit)
+	return MakeTreeParallel(Lhashes, omit)
+}
+
+func MakeRoots(hashes [][]byte, omit int) [][]byte {
+	currentLevel := hashes
+	for len(currentLevel) > 1<<uint(omit) {
+		currentLevel = makeParentLevel(currentLevel)
+	}
+	return currentLevel
+}
+func MakeRootsFromData(L []*big.Int, omit int) [][]byte {
+	Lhashes := make([][]byte, 0)
+	for _, v := range L {
+		hash := sha256.Sum256(v.Bytes())
+		Lhashes = append(Lhashes, hash[:])
+	}
+	return MakeRoots(Lhashes, omit)
 }
 
 func makeRoot(hashes [][]byte) []byte {
@@ -99,7 +120,7 @@ func makeRoot(hashes [][]byte) []byte {
 	return currentLevel[0]
 }
 
-func makeTree(hashes [][]byte, omit int) (tree [][][]byte, roots [][]byte) {
+func MakeTree(hashes [][]byte, omit int) (tree [][][]byte, roots [][]byte) {
 	currentLevel := hashes
 	tree = make([][][]byte, 0)
 	for len(currentLevel) > 1<<uint(omit) {
@@ -110,13 +131,13 @@ func makeTree(hashes [][]byte, omit int) (tree [][][]byte, roots [][]byte) {
 	return
 }
 
-func makeTreeFromL(L []*big.Int, omit int) (tree [][][]byte, roots [][]byte) {
+func MakeTreeFromData(L []*big.Int, omit int) (tree [][][]byte, roots [][]byte) {
 	Lhashes := make([][]byte, 0)
 	for _, v := range L {
 		hash := sha256.Sum256(v.Bytes())
 		Lhashes = append(Lhashes, hash[:])
 	}
-	return makeTree(Lhashes, omit)
+	return MakeTree(Lhashes, omit)
 }
 
 func fullMerkleHeight(n int) int {
@@ -131,19 +152,53 @@ func fullMerkleHeight(n int) int {
 }
 
 // incomplete. might not need depending on memory of prover
-func makeTreeOnDiskFromL(L []*big.Int, omit int, file string) {
-	currentLevel := make([][]byte, 0)
+func MakeTreeOnDiskFromData(L []*big.Int, omit int, file string) (roots [][]byte) {
+	f, err := os.Create(file)
+	check(err)
 	for _, v := range L {
 		hash := sha256.Sum256(v.Bytes())
-		currentLevel = append(currentLevel, hash[:])
+		f.Write(hash[:])
 	}
-	for len(currentLevel) > 1<<uint(omit) {
-		currentLevel = makeParentLevel(currentLevel)
+	readOffset := 0
+	writeOffset := len(L)
+
+	for n := len(L); n > 1<<uint(omit); {
+		// fmt.Println(readOffset, writeOffset)
+		makeParentLevelOnDisk(f, n, readOffset, writeOffset)
+		readOffset += n
+		n = n%2 + n/2
+		writeOffset = readOffset + n
 	}
+	f.Seek(int64(readOffset*sha256.Size), 0)
+	roots = make([][]byte, 0)
+	for root := make([]byte, 32); ; {
+		_, err := f.Read(root)
+		if err != nil {
+			break
+		}
+		roots = append(roots, root)
+		fmt.Println(root)
+	}
+	return
 }
 
-func getBatchProofFromDisk(ids []int, treefile string, t int) (proof [][]byte) {
-	return
+func makeParentLevelOnDisk(f *os.File, n, readOffset, writeOffset int) {
+	// f.Seek(int64(writeOffset*sha256.Size), 0)
+	for i := readOffset; i < writeOffset; i += 2 {
+		child1 := make([]byte, sha256.Size)
+		child2 := make([]byte, sha256.Size)
+		_, err := f.ReadAt(child1, int64(i*sha256.Size))
+		check(err)
+		if !(i+1 == writeOffset) {
+			_, err = f.ReadAt(child2, int64((i+1)*sha256.Size))
+			check(err)
+		} else {
+			child2 = make([]byte, 0)
+		}
+		parent := makeParent(child1, child2)
+		// fmt.Println(parent)
+		f.Write(parent)
+	}
 }
 
 func merklePath(id int, total int) (path []int) {
@@ -155,12 +210,13 @@ func merklePath(id int, total int) (path []int) {
 	return
 }
 
-func getBatchProof(ids []int, tree [][][]byte) (proof [][]byte) {
-	height := len(tree)
-	fmt.Println("tree height", height)
-	for i := 0; i < height; i++ {
+func GetBatchProofFromDisk(ids []int, treefile string, n int, omit int) (proof [][]byte) {
+	f, err := os.Open(treefile)
+	check(err)
+	for offset, i := 0, 0; n > 1<<uint(omit); n, offset, i = n%2+n/2, offset+n, i+1 {
+		// fmt.Println(i, n, offset)
 		availNodes := make([]int, 0)
-		for j := 0; j < len(ids); j++ {
+		for j := range ids {
 			newNode := ids[j] >> uint(i)
 			add := true
 			for _, node := range availNodes {
@@ -187,10 +243,14 @@ func getBatchProof(ids []int, tree [][][]byte) (proof [][]byte) {
 			}
 			if add {
 				var sibling []byte
-				if siblingIndex == len(tree[i]) {
+				if siblingIndex == n {
 					sibling = []byte{}
 				} else {
-					sibling = tree[i][siblingIndex]
+					sibling = make([]byte, sha256.Size)
+					_, err := f.ReadAt(sibling, int64((offset+siblingIndex)*sha256.Size))
+					if err != nil {
+						return
+					}
 				}
 				proof = append(proof, sibling)
 			}
@@ -199,20 +259,71 @@ func getBatchProof(ids []int, tree [][][]byte) (proof [][]byte) {
 	return
 }
 
-func verifyBatchProof(ids []int, datas []*big.Int, roots [][]byte, proof [][]byte, height int) bool {
+func GetBatchProof(ids []int, tree [][][]byte) (proof [][]byte) {
+	height := len(tree)
+	fmt.Println("tree height", height)
+	for i, level := range tree {
+		availNodes := make([]int, 0)
+		for j := range ids {
+			add := true
+			newNode := ids[j] >> uint(i)
+			for _, node := range availNodes {
+				if node == newNode {
+					add = false
+				}
+			}
+			if add {
+				availNodes = append(availNodes, newNode)
+			}
+		}
+		for _, node := range availNodes {
+			var siblingIndex int
+			if node%2 == 0 {
+				siblingIndex = node + 1
+			} else {
+				siblingIndex = node - 1
+			}
+			add := true
+			for _, node2 := range availNodes {
+				if siblingIndex == node2 {
+					add = false
+				}
+			}
+			if add {
+				var sibling []byte
+				if siblingIndex == len(level) {
+					sibling = []byte{}
+				} else {
+					sibling = level[siblingIndex]
+				}
+				proof = append(proof, sibling)
+			}
+		}
+	}
+	return
+}
+
+func VerifyBatchProof(ids []int, datas []*big.Int, roots [][]byte, proof [][]byte, height int) bool {
 	currentLevelValues := make(map[int][]byte)
 	currentLevelInds := make([]int, 0)
 	front := 0
+
+	// fmt.Println(len(proof))
+	// fmt.Println(proof)
+	// fmt.Println(height)
 	for i, id := range ids {
 		data := datas[i].Bytes()
 		hash := sha256.Sum256(data)
 		currentLevelValues[id] = hash[:]
 		currentLevelInds = append(currentLevelInds, id)
+		// fmt.Println("id", id)
 	}
 
 	for i := 0; i < height; i++ {
 		siblings := make([]int, 0)
+		// fmt.Println(currentLevelInds)
 		for _, ind := range currentLevelInds {
+			// fmt.Println("i:", i, "ind:", ind)
 			var siblingIndex int
 			if ind%2 == 0 {
 				siblingIndex = ind + 1
@@ -226,6 +337,7 @@ func verifyBatchProof(ids []int, datas []*big.Int, roots [][]byte, proof [][]byt
 				}
 			}
 			if add {
+				// fmt.Println(front)
 				siblings = append(siblings, siblingIndex)
 				currentLevelValues[siblingIndex] = proof[front]
 				front++
@@ -261,28 +373,28 @@ func verifyBatchProof(ids []int, datas []*big.Int, roots [][]byte, proof [][]byt
 	return true
 }
 
-func getBatchProofOld(ids []int, tree [][][]byte) (proof [][]byte) {
+func GetBatchProofOld(ids []int, tree [][][]byte) (proof [][]byte) {
 	proof = make([][]byte, 0)
 	for _, id := range ids {
-		p := getProof(id, tree)
+		p := GetProof(id, tree)
 		proof = append(proof, p...)
 	}
 	return
 }
 
-func verifyBatchProofOld(ids []int, datas []*big.Int, roots [][]byte, proof [][]byte, height int) bool {
+func VerifyBatchProofOld(ids []int, datas []*big.Int, roots [][]byte, proof [][]byte, height int) bool {
 	perTree := 1 << uint(height)
 	for i, id := range ids {
 		rootId := id / perTree
 		root := roots[rootId]
-		if !verifyProof(datas[i].Bytes(), root, proof[i*height:(i+1)*height], id) {
+		if !VerifyProof(datas[i].Bytes(), root, proof[i*height:(i+1)*height], id) {
 			return false
 		}
 	}
 	return true
 }
 
-func getProof(id int, tree [][][]byte) (proof [][]byte) {
+func GetProof(id int, tree [][][]byte) (proof [][]byte) {
 	currentIndex := id
 	var siblingIndex int
 	for _, level := range tree {
@@ -306,7 +418,7 @@ func getProof(id int, tree [][][]byte) (proof [][]byte) {
 	return
 }
 
-func verifyProof(data []byte, root []byte, proof [][]byte, id int) bool {
+func VerifyProof(data []byte, root []byte, proof [][]byte, id int) bool {
 	hash := sha256.Sum256(data)
 	leaf := hash[:]
 	currentHash := leaf

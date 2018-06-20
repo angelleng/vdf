@@ -18,6 +18,9 @@ func main() {
 	var memprofile = flag.String("memprofile", "", "write memory profile to this file")
 	var gsPath = flag.String("gspath", "gs", "path to gs")
 	var NPath = flag.String("npath", "N", "path to N")
+	var rootsPath = flag.String("rootspath", "roots", "path to merkle roots")
+	var solPath = flag.String("solpath", "solution", "path to solution")
+
 	flag.IntVar(&t, "t", 100, "write memory profile to this file")
 	flag.IntVar(&B, "B", 10000, "write memory profile to this file")
 	flag.IntVar(&lambda, "lambda", 100, "write memory profile to this file")
@@ -25,6 +28,8 @@ func main() {
 	flag.IntVar(&omitHeight, "omit", 0, "omit")
 
 	flag.Parse()
+
+	fmt.Printf("parameters: ")
 	if *cpuprofile != "" {
 		f, err := os.Create(*cpuprofile)
 		if err != nil {
@@ -38,10 +43,8 @@ func main() {
 	vdf.Setup(t, B, lambda, keysize, *gsPath, *NPath)
 	tic.Toc("setup time:")
 
-	var evaluator vdf.Evaluator
-	var verifier vdf.Verifier
-	evaluator.Init(t, omitHeight)
-	verifier.Init(t, omitHeight)
+	vdf.EvalInit(t, omitHeight)
+	vdf.VeriInit(t, omitHeight, *rootsPath)
 
 	w := new(bytes.Buffer)
 	e := gob.NewEncoder(w)
@@ -73,11 +76,10 @@ func main() {
 	for challenge := 0; challenge < 1; challenge++ {
 		// solution := vdf.Evaluate(t, B, lambda, evaluateKey, challenge)
 		tic.Tic()
-		solution2 := evaluator.Eval(t, B, lambda, omitHeight, *NPath, challenge, *gsPath)
+		solution2 := vdf.Evaluate(t, B, lambda, omitHeight, *NPath, challenge, *gsPath, *solPath)
 		tic.Toc("evaluate time:")
 
 		fmt.Println("")
-
 		w.Reset()
 		e.Encode(solution2.L_x)
 		fmt.Printf("solution.L_x size: %v (%v B)\n", vdf.HumanSize(w.Len()), w.Len())
@@ -87,12 +89,9 @@ func main() {
 		w.Reset()
 		e.Encode(solution2.MerkleProof)
 		fmt.Printf("solution.MerkleProof size: %v (%v B)\n", vdf.HumanSize(w.Len()), w.Len())
-		w.Reset()
-		e.Encode(verifier)
-		fmt.Printf("verifier storage size: %v (%v B)\n", vdf.HumanSize(w.Len()), w.Len())
 		// success := vdf.Verify(t, B, lambda, verifyKey, solution, challenge)
 		tic.Tic()
-		success2 := verifier.Verify(t, B, lambda, omitHeight, *NPath, challenge, solution2)
+		success2 := vdf.Verify(t, B, lambda, omitHeight, *NPath, *rootsPath, challenge, *solPath)
 		tic.Toc("verify time:")
 		fmt.Println("result: ", success2)
 		fmt.Println("finish")
