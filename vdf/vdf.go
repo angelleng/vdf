@@ -311,7 +311,6 @@ func Setup(t, B, lambda, keysize int, gsPath, NPath string) {
 	tic.Tic()
 	computeAndStoreGs(hashfunc, B, P_inv, N, gsPath)
 	tic.Toc("compute and store gs time")
-
 }
 
 type Solution struct {
@@ -323,21 +322,26 @@ type Solution struct {
 func EvalInit(t, omitHeight int) {
 	tic := tictoc.NewTic()
 	L := computeL(t)
+	w := new(bytes.Buffer)
+	e := gob.NewEncoder(w)
+	e.Encode(L)
+	fmt.Printf("L size: %v (%v B)\n", HumanSize(w.Len()), w.Len())
+	fmt.Println("merkle tree size:", HumanSize(32*t*2))
+	bitlen := 0
+	for _, v := range L {
+		bitlen += v.BitLen()
+	}
+	fmt.Println("elements in L size:", bitlen)
 
 	lpath := "L"
 	treepath := "Ltree"
 	lfile, _ := os.Create(lpath)
-	treefile, _ := os.Create(treepath)
 	defer lfile.Close()
-	defer treefile.Close()
 	for _, v := range L {
 		data := bigToFixedLengthBytes(v, 2*log2(t))
 		lfile.Write(data)
 	}
-	tree, _ := MakeTreeFromData(L, omitHeight)
-	encoder := gob.NewEncoder(treefile)
-	err := encoder.Encode(tree)
-	check(err)
+	_ = MakeTreeOnDiskFromData(L, omitHeight, treepath)
 
 	tic.Toc("evaluator init time:")
 }
@@ -357,35 +361,33 @@ func Evaluate(t, B, lambda, omitHeight int, NPath string, x interface{}, gsPath,
 	tic.Toc("read and compute g_x time:")
 	// fmt.Println("g_x", y)
 
-	L := computeL(t)
-	tic.Toc("compute L time:")
+	L := make([]*big.Int, t)
 
-	w := new(bytes.Buffer)
-	e := gob.NewEncoder(w)
-	e.Encode(L)
-	fmt.Printf("L size: %v (%v B)\n", HumanSize(w.Len()), w.Len())
-	fmt.Println("merkle tree size:", HumanSize(32*t*2))
-
-	bitlen := 0
-	for _, v := range L {
-		bitlen += v.BitLen()
+	f, err := os.Open("L")
+	defer f.Close()
+	check(err)
+	for i := range L {
+		buf := make([]byte, 2*log2(t))
+		f.Read(buf)
+		L[i] = big.NewInt(0).SetBytes(buf)
 	}
-	fmt.Println("elements in L size:", bitlen)
+
+	tic.Toc("read L time:")
 
 	tic.Tic()
-	tree, _ := MakeTreeFromData(L, omitHeight)
-	tic.Toc("generate merkle tree takes:")
-
-	proofs := GetBatchProof(L_ind, tree)
+	proofs := GetBatchProofFromDisk(L_ind, "Ltree", t, omitHeight)
 	tic.Toc("generate merkle proof takes:")
 
 	L_x := make([]*big.Int, lambda)
 	for i, v := range L_ind {
-		L_x[i] = L[v]
+		buf := make([]byte, 2*log2(t))
+		f.ReadAt(buf, int64(v*2*log2(t)))
+		L_x[i] = big.NewInt(0).SetBytes(buf)
+		// L_x[i] = L[v]
 	}
 
 	tic.Tic()
-	for i, v := range L {
+	for i, v := range L { // TODO read L from disk
 		yes := true
 		for _, l := range L_ind {
 			if i == l {

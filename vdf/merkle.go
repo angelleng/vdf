@@ -155,6 +155,7 @@ func fullMerkleHeight(n int) int {
 func MakeTreeOnDiskFromData(L []*big.Int, omit int, file string) (roots [][]byte) {
 	f, err := os.Create(file)
 	check(err)
+	defer f.Close()
 	for _, v := range L {
 		hash := sha256.Sum256(v.Bytes())
 		f.Write(hash[:])
@@ -212,6 +213,7 @@ func merklePath(id int, total int) (path []int) {
 
 func GetBatchProofFromDisk(ids []int, treefile string, n int, omit int) (proof [][]byte) {
 	f, err := os.Open(treefile)
+	defer f.Close()
 	check(err)
 	for offset, i := 0, 0; n > 1<<uint(omit); n, offset, i = n%2+n/2, offset+n, i+1 {
 		// fmt.Println(i, n, offset)
