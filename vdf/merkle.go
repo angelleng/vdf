@@ -178,7 +178,7 @@ func MakeTreeOnDiskFromData(L []*big.Int, omit int, file string) (roots [][]byte
 			break
 		}
 		roots = append(roots, root)
-		fmt.Println(root)
+		// fmt.Println(root)
 	}
 	return
 }

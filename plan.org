@@ -1,10 +1,13 @@
-* TODO Merkle tree:
+* DONE Merkle tree:
 - [X] refactor old proof method
 - [X] store tree on disk for new method, don't use gob
-* TODO Hygiene:
+* DONE Hygiene:
 - [X] make omitHeight and filename of gs arguments
 - [X] refactor code, make functions in vdf.go interact with disk directly, get rid of evalKey etc.
-- [ ] refactor code, devide vdf.go into several files 
+- [X] refactor code, devide vdf.go into several files
 * TODO Implement Bloom filters for verification on L
 - [ ] Read about Bloom filters
 - [ ] Code up Bloom filters
+* TODO EVM
+- [ ] Calculate gas cost for each scenario
+- [ ] Write solidity code 

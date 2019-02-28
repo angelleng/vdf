@@ -37,7 +37,7 @@ func computeL(t int) (L []*big.Int) {
 		primes = prime.Primes(252097800629)
 	}
 	if len(primes) < t+1 {
-		fmt.Println("error: not enough primes generated.")
+		panic("error: not enough primes generated.")
 	}
 	L = make([]*big.Int, t)
 	for i := 0; i < t; i++ {
@@ -271,11 +271,11 @@ func Hashfunc(input *big.Int, N *big.Int) (hashval *big.Int) {
 func Setup(t, B, lambda, keysize int, gsPath, NPath string) {
 	if lambda >= t || lambda >= B {
 		err := errors.New("error, lambda should be less than t and B")
-		fmt.Println(err)
+		panic(err)
 	}
-	fmt.Println("\nSETUP")
 	fmt.Printf("parameters: -t=%v -B=%v -lambda=%v -keysize=%v \n", t, B, lambda, keysize)
 
+	fmt.Println("\nSETUP")
 	tic := tictoc.NewTic()
 	L := computeL(t)
 	tic.Toc("compute L time:")
@@ -322,6 +322,7 @@ type Solution struct {
 func EvalInit(t, omitHeight int) {
 	tic := tictoc.NewTic()
 	L := computeL(t)
+	tic.Toc("compute L time")
 	w := new(bytes.Buffer)
 	e := gob.NewEncoder(w)
 	e.Encode(L)
@@ -331,19 +332,19 @@ func EvalInit(t, omitHeight int) {
 	for _, v := range L {
 		bitlen += v.BitLen()
 	}
-	fmt.Println("elements in L size:", bitlen)
+	fmt.Println("L compact size", bitlen, "b")
 
 	lpath := "L"
 	treepath := "Ltree"
 	lfile, _ := os.Create(lpath)
 	defer lfile.Close()
 	for _, v := range L {
-		data := bigToFixedLengthBytes(v, 2*log2(t))
+		data := bigToFixedLengthBytes(v, log2(t)/4)
 		lfile.Write(data)
 	}
 	_ = MakeTreeOnDiskFromData(L, omitHeight, treepath)
 
-	tic.Toc("evaluator init time:")
+	// tic.Toc("evaluator init time:")
 }
 
 func Evaluate(t, B, lambda, omitHeight int, NPath string, x interface{}, gsPath, solPath string) (sol Solution) {
@@ -367,7 +368,7 @@ func Evaluate(t, B, lambda, omitHeight int, NPath string, x interface{}, gsPath,
 	defer f.Close()
 	check(err)
 	for i := range L {
-		buf := make([]byte, 2*log2(t))
+		buf := make([]byte, log2(t)/4)
 		f.Read(buf)
 		L[i] = big.NewInt(0).SetBytes(buf)
 	}
@@ -380,8 +381,8 @@ func Evaluate(t, B, lambda, omitHeight int, NPath string, x interface{}, gsPath,
 
 	L_x := make([]*big.Int, lambda)
 	for i, v := range L_ind {
-		buf := make([]byte, 2*log2(t))
-		f.ReadAt(buf, int64(v*2*log2(t)))
+		buf := make([]byte, log2(t)/4)
+		f.ReadAt(buf, int64(v*(log2(t)/4)))
 		L_x[i] = big.NewInt(0).SetBytes(buf)
 		// L_x[i] = L[v]
 	}
@@ -416,13 +417,13 @@ func Evaluate(t, B, lambda, omitHeight int, NPath string, x interface{}, gsPath,
 
 func VeriInit(t, omitHeight int, rootsPath string) {
 	tic := tictoc.NewTic()
-	tic2 := tictoc.NewTic()
+	// tic2 := tictoc.NewTic()
 	L := computeL(t)
 	tic.Toc("compute L time:")
 
-	_, Lroots := MakeTreeFromData(L, omitHeight)
+	Lroots := MakeRootsFromData(L, omitHeight)
 	tic.Toc("compute merkle tree time:")
-	tic2.Toc("verify init time:")
+	// tic2.Toc("verify init time:")
 
 	file, _ := os.Create(rootsPath)
 	encoder := gob.NewEncoder(file)
@@ -453,13 +454,12 @@ func Verify(t, B, lambda, omitHeight int, NPath string, rootsPath string, x inte
 	decoder.Decode(sol)
 	file.Close()
 
-	fmt.Println("omitHeight:", omitHeight)
 	fmt.Println("\nVERIFY")
 	tic := tictoc.NewTic()
 	L_ind, S_x := generateChallenge(t, B, lambda, x)
 	tic.Toc("generate challenge time:")
 	height := fullMerkleHeight(t)
-	fmt.Println(height)
+	// fmt.Println("tree height", height)
 
 	if !VerifyBatchProof(L_ind, sol.L_x, *roots, sol.MerkleProof, height-omitHeight) {
 		return false

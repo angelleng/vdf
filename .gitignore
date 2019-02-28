@@ -1,3 +1,27 @@
+L
+Ltree
+N
+cpu.prof
+eval.key
+eval.storage
+gs0
+mem.prof
+roots
+solution
+solution.txt
+vdf/merkletree
+vdf/out.txt
+vdf/out0.txt
+vdf/out1.txt
+vdf/out2.txt
+vdf/out3.txt
+vdf/out4.txt
+vdf/out5.txt
+veri.key
+veri.storage
+verify.key
+tags
+
 .DS_Store 
 *.pdf 
 # Binaries for programs and plugins

@@ -1,18 +1,14 @@
 package main
 
 import (
-	"encoding/gob"
 	"flag"
-	"fmt"
-	"os"
-	"time"
+	"tictoc"
 	"vdf"
 )
 
 func main() {
 	var t, B, lambda, keysize, omitHeight int
-	var veriKeyPath = flag.String("verikeypath", "veri.key", "path to verify key")
-	var veriStoragePath = flag.String("veristoragepath", "veri.storage", "path to verifier storage")
+	var rootsPath = flag.String("rootspath", "roots", "path to merkle roots")
 
 	flag.IntVar(&t, "t", 1000000, "t")
 	flag.IntVar(&B, "B", 1000000, "B")
@@ -22,22 +18,8 @@ func main() {
 
 	flag.Parse()
 
-	verifyKey := new(vdf.VerifyKey)
-	file, _ := os.Open(*veriKeyPath)
-	decoder := gob.NewDecoder(file)
-	decoder.Decode(verifyKey)
-	file.Close()
+	tic := tictoc.NewTic()
+	vdf.VeriInit(t, omitHeight, *rootsPath)
+	tic.Toc("verify init time")
 
-	t1 := time.Now()
-
-	var verifier vdf.Verifier
-	verifier.Init(t, B, lambda, omitHeight, verifyKey)
-	t2 := time.Now()
-	elapsed := t2.Sub(t1)
-	fmt.Println("verify init time", elapsed)
-
-	file, _ = os.Create(*veriStoragePath)
-	encoder := gob.NewEncoder(file)
-	encoder.Encode(&verifier)
-	file.Close()
 }

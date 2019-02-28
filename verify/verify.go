@@ -1,21 +1,19 @@
 package main
 
 import (
-	"encoding/gob"
 	"flag"
 	"fmt"
 	"io/ioutil"
-	"math/big"
-	"os"
+	"tictoc"
 	"vdf"
 )
 
 func main() {
 	var t, B, lambda, keysize, omitHeight int
-	var veriKeyPath = flag.String("verikeypath", "veri.key", "path to verify key")
-	var veriStoragePath = flag.String("veristoragepath", "veri.storage", "path to verifier storage")
 	var challengePath = flag.String("challengepath", "challenge.txt", "path to challenge")
-	var solutionPath = flag.String("solutionpath", "solution.txt", "path to solution")
+	var NPath = flag.String("npath", "N", "path to N")
+	var rootsPath = flag.String("rootspath", "roots", "path to merkle roots")
+	var solPath = flag.String("solpath", "solution", "path to solution")
 
 	flag.IntVar(&t, "t", 1000000, "t")
 	flag.IntVar(&B, "B", 1000000, "B")
@@ -25,37 +23,10 @@ func main() {
 
 	flag.Parse()
 
-	verifyKey := new(vdf.VerifyKey)
-	file, err := os.Open(*veriKeyPath)
-	if err != nil {
-		fmt.Println(err)
-	}
-	decoder := gob.NewDecoder(file)
-	err = decoder.Decode(verifyKey)
-	if err != nil {
-		fmt.Println(err)
-	}
-	file.Close()
+	challenge, _ := ioutil.ReadFile(*challengePath)
 
-	verifier := new(vdf.Verifier)
-	file, _ = os.Open(*veriStoragePath)
-	decoder = gob.NewDecoder(file)
-	decoder.Decode(verifier)
-	file.Close()
-
-	verifier.Hash = func(input *big.Int) (hashval *big.Int) {
-		return vdf.Hashfunc(input, verifier.N)
-	}
-
-	challenge, err := ioutil.ReadFile(*challengePath)
-
-	solution := new(vdf.Solution)
-	file, _ = os.Open(*solutionPath)
-	decoder = gob.NewDecoder(file)
-	decoder.Decode(solution)
-	file.Close()
-	// fmt.Println(solution)
-
-	success := verifier.Verify(challenge, omitHeight, *solution)
+	tic := tictoc.NewTic()
+	success := vdf.Verify(t, B, lambda, omitHeight, *NPath, *rootsPath, challenge, *solPath)
+	tic.Toc("verify time")
 	fmt.Println("result: ", success)
 }
